@@ -1,6 +1,7 @@
 package download
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,6 +49,14 @@ func TestRenderQueuedJobStaysStill(t *testing.T) {
 	cancelled := Render([]store.Job{{ID: "1", Title: "Stop", Status: "cancelled"}}, 0, 0, 80, "")
 	if !strings.Contains(cancelled, "cancelled") {
 		t.Fatalf("cancel scene = %s", cancelled)
+	}
+}
+
+func TestFailedDownloadColorDiffersFromRunning(t *testing.T) {
+	failed := fmt.Sprint(lineStyle("failed", false).GetForeground())
+	running := fmt.Sprint(lineStyle("running", false).GetForeground())
+	if failed == running {
+		t.Fatalf("failed and running share %q", failed)
 	}
 }
 

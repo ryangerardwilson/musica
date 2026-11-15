@@ -4,7 +4,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/ryangerardwilson/musica/internal/store"
+)
+
+var (
+	titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb703")).Bold(true)
+	liveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dffb3"))
+	hotStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7b54")).Bold(true)
+	goldStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166"))
+	failStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6b6b"))
+	mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8ecae6"))
 )
 
 var (
@@ -17,18 +27,18 @@ func Render(jobs []store.Job, selected, frame, width int, playing string) string
 	if width < 20 {
 		width = 20
 	}
-	lines := []string{"downloads"}
+	lines := []string{titleStyle.Render("downloads")}
 	if playing != "" {
-		lines = append(lines, "playing  "+fit(playing, width-10))
+		lines = append(lines, liveStyle.Render("playing  "+fit(playing, width-10)))
 	}
 	if len(jobs) == 0 {
-		lines = append(lines, "", "no downloads", "", "y download into the open cassette")
+		lines = append(lines, "", mutedStyle.Render("no downloads"), "", mutedStyle.Render("y download into the open cassette"))
 		return strings.Join(lines, "\n")
 	}
 	for i, job := range jobs {
 		lines = append(lines, "", renderJob(job, i == selected, frame, width))
 	}
-	lines = append(lines, "", "x cancel    esc library    y another")
+	lines = append(lines, "", mutedStyle.Render("x cancel    esc library    y another"))
 	return strings.Join(lines, "\n")
 }
 
@@ -51,7 +61,24 @@ func renderJob(job store.Job, selected bool, frame, width int) string {
 	}
 	bar := progressBar(shownPercent(job), barWidth)
 	headline := fmt.Sprintf("%s%s %s %s  %3.0f%%  %s", mark, left, bar, right, shownPercent(job), fit(job.Title, 28))
-	return headline + "\n" + mark + "  " + jobDetail(job)
+	detail := mark + "  " + jobDetail(job)
+	return lineStyle(job.Status, selected).Render(headline) + "\n" + lineStyle(job.Status, false).Render(detail)
+}
+
+func lineStyle(status string, selected bool) lipgloss.Style {
+	if selected {
+		return hotStyle
+	}
+	switch status {
+	case "running":
+		return liveStyle
+	case "done":
+		return goldStyle
+	case "failed":
+		return failStyle
+	default:
+		return mutedStyle
+	}
 }
 
 func shownPercent(job store.Job) float64 {

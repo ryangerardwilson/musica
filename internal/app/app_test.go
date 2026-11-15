@@ -13,6 +13,7 @@ import (
 	"github.com/ryangerardwilson/musica/internal/config"
 	"github.com/ryangerardwilson/musica/internal/library"
 	"github.com/ryangerardwilson/musica/internal/player"
+	"github.com/ryangerardwilson/musica/internal/store"
 	"github.com/ryangerardwilson/musica/internal/visualizer"
 )
 
@@ -414,53 +415,79 @@ func TestVisualizerRowStyleAvoidsHorizontalColorBands(t *testing.T) {
 	}
 }
 
-func TestPaletteStaysGrayscale(t *testing.T) {
-	allowed := map[string]bool{
-		"":    true,
-		"{}":  true,
-		"15":  true,
-		"240": true,
-		"242": true,
-		"244": true,
-		"245": true,
-		"246": true,
-		"248": true,
-		"250": true,
+func TestPaletteUsesColorWithoutRowBands(t *testing.T) {
+	grays := map[string]bool{
+		"15": true, "240": true, "242": true, "244": true,
+		"245": true, "246": true, "248": true, "250": true,
 	}
 	styles := []struct {
 		name  string
 		style lipgloss.Style
 	}{
 		{"title", titleStyle},
-		{"muted", mutedStyle},
 		{"status", statusStyle},
 		{"error", errorStyle},
-		{"cassetteSlot", cassetteSlotStyle},
-		{"cassetteRow", cassetteRowStyle},
 		{"cassettePlaying", cassettePlayingStyle},
 		{"cassetteSelected", cassetteSelectedStyle},
-		{"visualizerTop", visualizerRowStyle(0, 6)},
-		{"visualizerHigh", visualizerRowStyle(1, 6)},
-		{"visualizerMid", visualizerRowStyle(3, 6)},
-		{"visualizerLow", visualizerRowStyle(4, 6)},
-		{"visualizerBottom", visualizerRowStyle(5, 6)},
-		{"visualizerDarkCore", visualizerDarkCoreStyle()},
 		{"visualizerRainTrace", visualizerCellStyle(visualizer.ToneRainTrace, 0, 6)},
-		{"visualizerRainDim", visualizerCellStyle(visualizer.ToneRainDim, 0, 6)},
-		{"visualizerRainSoft", visualizerCellStyle(visualizer.ToneRainSoft, 0, 6)},
-		{"visualizerRainGlow", visualizerCellStyle(visualizer.ToneRainGlow, 0, 6)},
 		{"visualizerRainBright", visualizerCellStyle(visualizer.ToneRainBright, 0, 6)},
 	}
-
 	for _, item := range styles {
 		foreground := fmt.Sprint(item.style.GetForeground())
-		background := fmt.Sprint(item.style.GetBackground())
-		if !allowed[foreground] {
-			t.Fatalf("%s foreground = %q, outside restricted palette", item.name, foreground)
+		if grays[foreground] || foreground == "" || foreground == "{}" {
+			t.Fatalf("%s foreground = %q, still grayscale", item.name, foreground)
 		}
-		if !allowed[background] {
-			t.Fatalf("%s background = %q, outside restricted palette", item.name, background)
-		}
+	}
+	trace := fmt.Sprint(visualizerCellStyle(visualizer.ToneRainTrace, 0, 6).GetForeground())
+	bright := fmt.Sprint(visualizerCellStyle(visualizer.ToneRainBright, 0, 6).GetForeground())
+	if trace == bright {
+		t.Fatalf("rain trace and bright share %q", trace)
+	}
+}
+
+func TestPauseOpensMenuAndResumeLeavesIt(t *testing.T) {
+	player := &fakeAudioPlayer{path: "/music/live.mp3", playing: true}
+	m := model{
+		player:        player,
+		visualizer:    visualizer.New(4),
+		showDownloads: true,
+		downloads:     []store.Job{{ID: "a", Title: "Blue Monday", Status: "running"}},
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	paused := next.(model)
+	if !player.IsPaused() {
+		t.Fatal("space did not pause")
+	}
+	if !paused.showMenu {
+		t.Fatal("pause left the menu closed")
+	}
+	if paused.showDownloads {
+		t.Fatal("pause left the download view covering the menu")
+	}
+	if paused.downloads[0].Status != "running" {
+		t.Fatal("pause cancelled the download")
+	}
+
+	next, _ = paused.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	resumed := next.(model)
+	if player.IsPaused() {
+		t.Fatal("second space did not resume")
+	}
+	if !resumed.showMenu {
+		t.Fatal("resume closed the menu")
+	}
+}
+
+func TestPauseWithoutTrackDoesNotOpenMenu(t *testing.T) {
+	m := model{player: &fakeAudioPlayer{}, visualizer: visualizer.New(4)}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	updated := next.(model)
+	if updated.showMenu {
+		t.Fatal("space opened the menu with nothing playing")
+	}
+	if updated.status != "nothing is playing" {
+		t.Fatalf("status = %q", updated.status)
 	}
 }
 

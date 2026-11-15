@@ -104,6 +104,9 @@ func (m model) updateDownloadKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		m.beginYouTubeDownload()
 		return m, nil
+	case " ":
+		m.togglePause()
+		return m, nil
 	default:
 		return m, nil
 	}

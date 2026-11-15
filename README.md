@@ -73,7 +73,7 @@ directory when stdin is interactive. Non-interactive first runs save `~/Music`.
 - `Enter` - open selected cassette or play selected track
 - `Esc` - return to cassettes; from the cassette menu, hide the overlay while playback continues
 - `m` - toggle the cassette and track menu, which opens by default
-- `Space` - pause/resume current track
+- `Space` - pause and open the cassette menu; press again to resume
 - `f` / `b` - seek forward/backward by 10 seconds
 - `r` - restart the current track
 - `x` - stop playback

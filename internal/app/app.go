@@ -46,15 +46,15 @@ const (
 )
 
 var (
-	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
-	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb703")).Bold(true)
+	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8ecae6"))
+	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6b6b")).Bold(true)
 
-	cassetteSlotStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
-	cassetteRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	cassettePlayingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
-	cassetteSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	cassetteSlotStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166")).Bold(true)
+	cassetteRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#d6e4f0"))
+	cassettePlayingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dffb3")).Bold(true)
+	cassetteSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7b54")).Bold(true)
 )
 
 var hideDisplay = func() error {
@@ -237,6 +237,27 @@ func (m model) shouldAdvanceVisualizerFrame() bool {
 	return m.player == nil || !m.player.IsPaused()
 }
 
+func (m *model) togglePause() {
+	if m.player == nil {
+		m.status = "nothing is playing"
+		return
+	}
+	if path, _ := m.player.State(); path == "" {
+		m.status = "nothing is playing"
+		return
+	}
+	paused := m.player.TogglePause()
+	m.visualizer.SetPaused(paused)
+	if !paused {
+		m.status = "playing"
+		return
+	}
+	m.status = "paused"
+	m.showMenu = true
+	m.showDownloads = false
+	m.showHelp = false
+}
+
 func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "?" {
@@ -293,21 +314,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.activateSelected()
 	case " ":
-		if m.player == nil {
-			m.status = "nothing is playing"
-			break
-		}
-		if path, _ := m.player.State(); path == "" {
-			m.status = "nothing is playing"
-			break
-		}
-		paused := m.player.TogglePause()
-		m.visualizer.SetPaused(paused)
-		if paused {
-			m.status = "paused"
-		} else {
-			m.status = "playing"
-		}
+		m.togglePause()
 	case "f":
 		if err := m.seekCurrent(10 * time.Second); err != nil {
 			m.status = err.Error()
@@ -1009,23 +1016,23 @@ func (m model) renderHelp() string {
 	lines := []string{
 		titleStyle.Render("musica shortcuts"),
 		"",
-		"h/l, j/k, arrows    move selection",
-		"enter               open cassette or play track",
-		"esc                 return to cassettes; from cassettes quit",
-		"m                   toggle cassette and track menu",
-		"space               pause/resume",
-		"f / b               seek forward/backward 10 seconds",
-		"r                   restart current track",
-		"x                   stop playback",
-		"s                   shuffle current track list",
-		"/                   search",
-		"n / N               next/previous search result; n creates a cassette when no search is active",
-		"u                   show downloads",
-		"y                   download YouTube audio into the open cassette",
-		",rn                 rename selected cassette or track",
-		"dd                  delete selected cassette or track",
-		"?                   toggle this view",
-		"ctrl+c              quit",
+		mutedStyle.Render("h/l, j/k, arrows    move selection"),
+		mutedStyle.Render("enter               open cassette or play track"),
+		mutedStyle.Render("esc                 return to cassettes; from cassettes quit"),
+		mutedStyle.Render("m                   toggle cassette and track menu"),
+		mutedStyle.Render("space               pause and open the menu; resume keeps it open"),
+		mutedStyle.Render("f / b               seek forward/backward 10 seconds"),
+		mutedStyle.Render("r                   restart current track"),
+		mutedStyle.Render("x                   stop playback"),
+		mutedStyle.Render("s                   shuffle current track list"),
+		mutedStyle.Render("/                   search"),
+		mutedStyle.Render("n / N               next/previous search result; n creates a cassette when no search is active"),
+		mutedStyle.Render("u                   show downloads"),
+		mutedStyle.Render("y                   download YouTube audio into the open cassette"),
+		mutedStyle.Render(",rn                 rename selected cassette or track"),
+		mutedStyle.Render("dd                  delete selected cassette or track"),
+		mutedStyle.Render("?                   toggle this view"),
+		mutedStyle.Render("ctrl+c              quit"),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1057,7 +1064,7 @@ func (m model) renderYouTubeModal() string {
 		lines = append(lines, m.status)
 	}
 
-	box := boxedLines(lines, modalWidth)
+	box := titleStyle.Render(boxedLines(lines, modalWidth))
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
@@ -1464,17 +1471,17 @@ func renderVisualizerCells(cells []visualizer.Cell, row, total int) string {
 func visualizerCellStyle(tone visualizer.CellTone, row, total int) lipgloss.Style {
 	switch tone {
 	case visualizer.ToneDark:
-		return visualizerGrayStyle("240")
+		return visualizerGrayStyle("#3a2158")
 	case visualizer.ToneRainTrace:
-		return visualizerGrayStyle("242")
+		return visualizerGrayStyle("#0e6b6b")
 	case visualizer.ToneRainDim:
-		return visualizerGrayStyle("244")
+		return visualizerGrayStyle("#14919b")
 	case visualizer.ToneRainSoft:
-		return visualizerGrayStyle("246")
+		return visualizerGrayStyle("#2ec4b6")
 	case visualizer.ToneRainGlow:
-		return visualizerGrayStyle("248")
+		return visualizerGrayStyle("#80ffdb")
 	case visualizer.ToneRainBright:
-		return visualizerGrayStyle("250")
+		return visualizerGrayStyle("#ffd166")
 	default:
 		return visualizerRowStyle(row, total)
 	}
@@ -1489,11 +1496,11 @@ func visualizerCellText(cells []visualizer.Cell) string {
 }
 
 func visualizerDarkCoreStyle() lipgloss.Style {
-	return visualizerGrayStyle("240")
+	return visualizerGrayStyle("#3a2158")
 }
 
 func visualizerRowStyle(_, _ int) lipgloss.Style {
-	return visualizerGrayStyle("245")
+	return visualizerGrayStyle("#7fdbca")
 }
 
 func visualizerGrayStyle(color string) lipgloss.Style {
