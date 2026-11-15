@@ -86,7 +86,8 @@ directory when stdin is interactive. Non-interactive first runs save `~/Music`.
 - `/` - search
 - `n` / `N` - next/previous search result; without search, `n` creates a cassette
 - `?` - toggle shortcuts screen
-- `Ctrl+C` - stop playback and quit from any view or prompt; `q` does not quit
+- `q` - stop playback and quit, except while typing in a prompt
+- `Ctrl+C` - stop playback and quit from any view or prompt
 
 YouTube downloads prompt for the URL first, then the song name. The download
 keeps running after the TUI closes and while other tracks play. Cancel it from

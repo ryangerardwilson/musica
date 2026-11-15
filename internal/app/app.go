@@ -220,7 +220,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.close()
 		return m, tea.Quit
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
+		if msg.String() == "ctrl+c" || (m.inputKind == "" && msg.String() == "q") {
 			m.close()
 			return m, tea.Quit
 		}
@@ -1032,6 +1032,7 @@ func (m model) renderHelp() string {
 		mutedStyle.Render(",rn                 rename selected cassette or track"),
 		mutedStyle.Render("dd                  delete selected cassette or track"),
 		mutedStyle.Render("?                   toggle this view"),
+		mutedStyle.Render("q                   stop playback and quit"),
 		mutedStyle.Render("ctrl+c              quit"),
 	}
 	return strings.Join(lines, "\n")

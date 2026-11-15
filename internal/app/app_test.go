@@ -1154,24 +1154,35 @@ func TestCommandBarRemovedFromHelpAndKeymap(t *testing.T) {
 	}
 }
 
-func TestQDoesNotQuitOrStopPlayback(t *testing.T) {
+func TestQEndsTheSession(t *testing.T) {
 	player := &fakeAudioPlayer{path: "/music/track.mp3", playing: true}
 	m := model{
-		view:        rootView,
-		player:      player,
-		visualizer:  visualizer.New(8),
-		currentPath: "/music/track.mp3",
+		view:          rootView,
+		player:        player,
+		visualizer:    visualizer.New(8),
+		currentPath:   "/music/track.mp3",
+		showDownloads: true,
+		downloads:     []store.Job{{ID: "a", Title: "Blue Monday", Status: "running"}},
 	}
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if !isQuitCommand(cmd) {
+		t.Fatal("q did not quit")
+	}
+	if player.IsPlaying() {
+		t.Fatal("q left playback running")
+	}
+	if next.(model).downloads[0].Status != "running" {
+		t.Fatal("q cancelled the download")
+	}
+
+	typing := model{inputKind: inputSearch, input: "so", visualizer: visualizer.New(4)}
+	next, cmd = typing.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if isQuitCommand(cmd) {
-		t.Fatal("q returned tea.Quit, want playback UI to remain open")
+		t.Fatal("q quit while a prompt was open")
 	}
-	if !player.IsPlaying() {
-		t.Fatal("q stopped playback")
-	}
-	if next.(model).currentPath != "/music/track.mp3" {
-		t.Fatalf("q cleared currentPath: %q", next.(model).currentPath)
+	if next.(model).input != "soq" {
+		t.Fatalf("prompt = %q, want soq", next.(model).input)
 	}
 }
 
