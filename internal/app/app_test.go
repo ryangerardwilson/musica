@@ -415,11 +415,7 @@ func TestVisualizerRowStyleAvoidsHorizontalColorBands(t *testing.T) {
 	}
 }
 
-func TestPaletteUsesColorWithoutRowBands(t *testing.T) {
-	grays := map[string]bool{
-		"15": true, "240": true, "242": true, "244": true,
-		"245": true, "246": true, "248": true, "250": true,
-	}
+func TestPaletteUsesWhiteText(t *testing.T) {
 	styles := []struct {
 		name  string
 		style lipgloss.Style
@@ -434,14 +430,9 @@ func TestPaletteUsesColorWithoutRowBands(t *testing.T) {
 	}
 	for _, item := range styles {
 		foreground := fmt.Sprint(item.style.GetForeground())
-		if grays[foreground] || foreground == "" || foreground == "{}" {
-			t.Fatalf("%s foreground = %q, still grayscale", item.name, foreground)
+		if foreground != "15" {
+			t.Fatalf("%s foreground = %q, want white", item.name, foreground)
 		}
-	}
-	trace := fmt.Sprint(visualizerCellStyle(visualizer.ToneRainTrace, 0, 6).GetForeground())
-	bright := fmt.Sprint(visualizerCellStyle(visualizer.ToneRainBright, 0, 6).GetForeground())
-	if trace == bright {
-		t.Fatalf("rain trace and bright share %q", trace)
 	}
 }
 

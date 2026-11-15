@@ -52,11 +52,11 @@ func TestRenderQueuedJobStaysStill(t *testing.T) {
 	}
 }
 
-func TestFailedDownloadColorDiffersFromRunning(t *testing.T) {
+func TestDownloadTextIsWhite(t *testing.T) {
 	failed := fmt.Sprint(lineStyle("failed", false).GetForeground())
 	running := fmt.Sprint(lineStyle("running", false).GetForeground())
-	if failed == running {
-		t.Fatalf("failed and running share %q", failed)
+	if failed != "15" || running != "15" {
+		t.Fatalf("download text = %q %q, want white", failed, running)
 	}
 }
 

@@ -46,15 +46,15 @@ const (
 )
 
 var (
-	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb703")).Bold(true)
-	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8ecae6"))
-	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166"))
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6b6b")).Bold(true)
+	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
 
-	cassetteSlotStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166")).Bold(true)
-	cassetteRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#d6e4f0"))
-	cassettePlayingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dffb3")).Bold(true)
-	cassetteSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7b54")).Bold(true)
+	cassetteSlotStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	cassetteRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	cassettePlayingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	cassetteSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
 )
 
 var hideDisplay = func() error {
@@ -1469,22 +1469,10 @@ func renderVisualizerCells(cells []visualizer.Cell, row, total int) string {
 }
 
 func visualizerCellStyle(tone visualizer.CellTone, row, total int) lipgloss.Style {
-	switch tone {
-	case visualizer.ToneDark:
-		return visualizerGrayStyle("#3a2158")
-	case visualizer.ToneRainTrace:
-		return visualizerGrayStyle("#0e6b6b")
-	case visualizer.ToneRainDim:
-		return visualizerGrayStyle("#14919b")
-	case visualizer.ToneRainSoft:
-		return visualizerGrayStyle("#2ec4b6")
-	case visualizer.ToneRainGlow:
-		return visualizerGrayStyle("#80ffdb")
-	case visualizer.ToneRainBright:
-		return visualizerGrayStyle("#ffd166")
-	default:
-		return visualizerRowStyle(row, total)
+	if tone == visualizer.ToneDark {
+		return visualizerGrayStyle("240")
 	}
+	return visualizerRowStyle(row, total)
 }
 
 func visualizerCellText(cells []visualizer.Cell) string {
@@ -1496,11 +1484,11 @@ func visualizerCellText(cells []visualizer.Cell) string {
 }
 
 func visualizerDarkCoreStyle() lipgloss.Style {
-	return visualizerGrayStyle("#3a2158")
+	return visualizerGrayStyle("240")
 }
 
 func visualizerRowStyle(_, _ int) lipgloss.Style {
-	return visualizerGrayStyle("#7fdbca")
+	return visualizerGrayStyle("15")
 }
 
 func visualizerGrayStyle(color string) lipgloss.Style {

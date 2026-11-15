@@ -88,20 +88,20 @@ Space MUST pause or resume the current track. Pausing MUST open the cassette men
 - **THEN** playback MUST resume
 - **AND** the cassette menu MUST stay open
 
-### Requirement: The player surface uses color
+### Requirement: The player text is white
 
-The visualizer, status line, help title, download view, and YouTube prompt MUST use color. Visualizer rows MUST share one base color so the field does not form horizontal bands. Rain intensity MUST use more than one color. A failed download MUST use a different color from a running download.
+The visualizer glyphs, status line, help, download view, and YouTube prompt MUST use white text. They MUST NOT use a separate hue for titles, status, errors, selection, playback, or download state. Visualizer rows MUST share one base color. Empty visualizer cells MAY stay dark.
 
-#### Scenario: Rain intensity is colored
+#### Scenario: Text is white
+
+- **GIVEN** the player is drawing
+- **WHEN** a title, a status line, a rain glyph, a running download, and a failed download are styled
+- **THEN** each foreground MUST be white
+- **AND** the running download and the failed download MUST share that white
+
+#### Scenario: Visualizer rows share one color
 
 - **GIVEN** the visualizer is drawing
-- **WHEN** a bright rain cell and a trace rain cell are styled
-- **THEN** their colors MUST differ
-- **AND** every visualizer row MUST use the same base color
-
-#### Scenario: A failed download is colored
-
-- **GIVEN** one download has failed and another is running
-- **WHEN** the download view chooses their colors
-- **THEN** those colors MUST differ
+- **WHEN** the top, middle, and bottom rows are styled
+- **THEN** those rows MUST use the same base color
 

@@ -9,12 +9,8 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb703")).Bold(true)
-	liveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dffb3"))
-	hotStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7b54")).Bold(true)
-	goldStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffd166"))
-	failStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6b6b"))
-	mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8ecae6"))
+	titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	textStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 )
 
 var (
@@ -29,16 +25,16 @@ func Render(jobs []store.Job, selected, frame, width int, playing string) string
 	}
 	lines := []string{titleStyle.Render("downloads")}
 	if playing != "" {
-		lines = append(lines, liveStyle.Render("playing  "+fit(playing, width-10)))
+		lines = append(lines, textStyle.Render("playing  "+fit(playing, width-10)))
 	}
 	if len(jobs) == 0 {
-		lines = append(lines, "", mutedStyle.Render("no downloads"), "", mutedStyle.Render("y download into the open cassette"))
+		lines = append(lines, "", textStyle.Render("no downloads"), "", textStyle.Render("y download into the open cassette"))
 		return strings.Join(lines, "\n")
 	}
 	for i, job := range jobs {
 		lines = append(lines, "", renderJob(job, i == selected, frame, width))
 	}
-	lines = append(lines, "", mutedStyle.Render("x cancel    esc library    y another"))
+	lines = append(lines, "", textStyle.Render("x cancel    esc library    y another"))
 	return strings.Join(lines, "\n")
 }
 
@@ -65,20 +61,11 @@ func renderJob(job store.Job, selected bool, frame, width int) string {
 	return lineStyle(job.Status, selected).Render(headline) + "\n" + lineStyle(job.Status, false).Render(detail)
 }
 
-func lineStyle(status string, selected bool) lipgloss.Style {
+func lineStyle(_ string, selected bool) lipgloss.Style {
 	if selected {
-		return hotStyle
+		return titleStyle
 	}
-	switch status {
-	case "running":
-		return liveStyle
-	case "done":
-		return goldStyle
-	case "failed":
-		return failStyle
-	default:
-		return mutedStyle
-	}
+	return textStyle
 }
 
 func shownPercent(job store.Job) float64 {
