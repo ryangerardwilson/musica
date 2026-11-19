@@ -25,18 +25,10 @@ func (m *model) syncDownloads() {
 		download.EnsureWorker()
 	}
 	finished := newlyFinished(m.downloads, jobs)
-	index := m.downloadIndex
-	if index < 0 || index >= len(jobs) {
-		index = runningIndex(jobs)
-	}
-	m.downloads = jobs
-	if index >= len(jobs) {
-		index = len(jobs) - 1
-	}
-	if index < 0 {
-		index = 0
-	}
-	m.downloadIndex = index
+	selected := selectedDownloadID(m.downloads, m.downloadIndex)
+	visible := visibleDownloads(jobs)
+	m.downloads = visible
+	m.downloadIndex = nextDownloadIndex(visible, selected)
 	if finished && m.currentPlaylist != "" {
 		m.reloadTracks()
 	}
@@ -74,6 +66,42 @@ func jobsNeedWorker(jobs []store.Job) bool {
 		}
 	}
 	return false
+}
+
+func visibleDownloads(jobs []store.Job) []store.Job {
+	visible := make([]store.Job, 0, len(jobs))
+	for _, job := range jobs {
+		if job.Status == "done" {
+			continue
+		}
+		visible = append(visible, job)
+	}
+	return visible
+}
+
+func selectedDownloadID(jobs []store.Job, index int) string {
+	if index < 0 || index >= len(jobs) {
+		return ""
+	}
+	return jobs[index].ID
+}
+
+func nextDownloadIndex(jobs []store.Job, selectedID string) int {
+	if selectedID != "" {
+		for i, job := range jobs {
+			if job.ID == selectedID {
+				return i
+			}
+		}
+	}
+	if len(jobs) == 0 {
+		return 0
+	}
+	index := runningIndex(jobs)
+	if index < 0 || index >= len(jobs) {
+		return 0
+	}
+	return index
 }
 
 func (m model) renderDownloads() string {

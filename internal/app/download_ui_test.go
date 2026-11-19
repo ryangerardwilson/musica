@@ -84,3 +84,35 @@ func TestUOpensDownloadView(t *testing.T) {
 		t.Fatalf("view = %s", view)
 	}
 }
+
+func TestDownloadViewHidesFinishedJobs(t *testing.T) {
+	m := model{
+		width: 80,
+		downloads: visibleDownloads([]store.Job{
+			{ID: "1", Title: "Now Serving", Status: "done", Percent: 100},
+			{ID: "2", Title: "Experience", Status: "running", Percent: 40, Speed: "1MiB/s", ETA: "00:03"},
+			{ID: "3", Title: "Broken", Status: "failed", Error: "no audio"},
+		}),
+		downloadIndex: 0,
+	}
+	view := m.renderDownloads()
+	if strings.Contains(view, "Now Serving") || strings.Contains(view, "in the cassette") {
+		t.Fatalf("finished download stayed visible: %s", view)
+	}
+	for _, want := range []string{"Experience", "Broken"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view %q missing %q", view, want)
+		}
+	}
+}
+
+func TestCompletionStillReloadsFromTheFullList(t *testing.T) {
+	previous := []store.Job{{ID: "1", Title: "Experience", Status: "running"}}
+	next := []store.Job{{ID: "1", Title: "Experience", Status: "done"}}
+	if !newlyFinished(previous, next) {
+		t.Fatal("completion was not noticed")
+	}
+	if len(visibleDownloads(next)) != 0 {
+		t.Fatal("finished download stayed in the visible list")
+	}
+}

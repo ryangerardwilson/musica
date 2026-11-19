@@ -81,7 +81,7 @@ directory when stdin is interactive. Non-interactive first runs save `~/Music`.
 - `s` - shuffle the current track list
 - `,rn` - rename selected cassette or track
 - `y` - download YouTube audio into the open cassette
-- `u` - show downloads. A running download animates its progress
+- `u` - show downloads. A running download animates its progress. A finished download leaves the list
 - `x` in the download view - cancel the selected download. Playback continues
 - `/` - search
 - `n` / `N` - next/previous search result; without search, `n` creates a cassette
