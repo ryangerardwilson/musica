@@ -1137,13 +1137,61 @@ func (m model) menuDialLine(width int) string {
 
 	rightWidth := 12
 	if playing != "idle" && width >= 64 {
-		rightWidth = minInt(30, maxInt(20, width/3))
+		rightWidth = playingColumnWidth(len(playing), width)
 	}
 	leftWidth := width - rightWidth - 2
 	if leftWidth < 1 {
 		return padRight(truncateMiddle(selected, width), width)
 	}
-	return padRight(truncateMiddle(selected, leftWidth), leftWidth) + "  " + padRight(truncateMiddle(playing, rightWidth), rightWidth)
+	shown := playing
+	if playing != "idle" {
+		shown = fitPlaying(playing, rightWidth)
+	}
+	return padRight(truncateMiddle(selected, leftWidth), leftWidth) + "  " + padRight(shown, rightWidth)
+}
+
+func playingColumnWidth(playingLen, width int) int {
+	const selectedMin = 36
+	maxRight := width - selectedMin - 2
+	if maxRight < 20 {
+		maxRight = 20
+	}
+	if playingLen < 20 {
+		return 20
+	}
+	if playingLen > maxRight {
+		return maxRight
+	}
+	return playingLen
+}
+
+func fitPlaying(playing string, width int) string {
+	if width <= 0 || len(playing) <= width {
+		return playing
+	}
+	state, rest, ok := strings.Cut(playing, " ")
+	clock, title, split := strings.Cut(rest, " ")
+	if !ok || !split {
+		return truncateEnd(playing, width)
+	}
+	prefix := state + " " + clock + " "
+	if len(prefix) >= width {
+		return truncateEnd(playing, width)
+	}
+	return prefix + truncateEnd(title, width-len(prefix))
+}
+
+func truncateEnd(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(value) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return value[:limit]
+	}
+	return value[:limit-3] + "..."
 }
 
 func boxedLines(lines []string, width int) string {

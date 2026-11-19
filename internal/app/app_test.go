@@ -599,6 +599,44 @@ func TestMenuDialUsesFixedSpacingBetweenSelectedAndPlaying(t *testing.T) {
 	}
 }
 
+func TestMenuDialShowsThePlayingSongName(t *testing.T) {
+	m := model{
+		view:     rootView,
+		selected: 0,
+		player: &fakeAudioPlayer{
+			path:    "/music/cyborg/Working as Intended.mp3",
+			elapsed: 4*time.Minute + 11*time.Second,
+			playing: true,
+		},
+		playlists: []library.Playlist{{Path: "/music/cyborg", Name: "cyborg"}},
+	}
+	line := m.menuDialLine(116)
+	if !strings.Contains(line, "playing 04:11 Working as Intended") {
+		t.Fatalf("line = %q", line)
+	}
+}
+
+func TestMenuDialTruncatesTheSongTitleAfterTheClock(t *testing.T) {
+	title := strings.Repeat("a", 80)
+	m := model{
+		view:     rootView,
+		selected: 0,
+		player: &fakeAudioPlayer{
+			path:    "/music/cyborg/" + title + ".mp3",
+			elapsed: 4*time.Minute + 11*time.Second,
+			playing: true,
+		},
+		playlists: []library.Playlist{{Path: "/music/cyborg", Name: "cyborg"}},
+	}
+	line := m.menuDialLine(80)
+	if !strings.Contains(line, "playing 04:11 ") || strings.Contains(line, "04:11...") {
+		t.Fatalf("line = %q", line)
+	}
+	if !strings.HasSuffix(strings.TrimRight(line, " "), "...") {
+		t.Fatalf("title was not end-truncated: %q", line)
+	}
+}
+
 func TestCassetteDialNavigationWrapsWithJKModel(t *testing.T) {
 	m := model{
 		view:     tracksView,
