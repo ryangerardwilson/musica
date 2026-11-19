@@ -25,12 +25,14 @@ func sqliteRun(path, sql string, asJSON bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	args := []string{path}
+	args := []string{"-batch", "-noinit", path}
 	if asJSON {
 		args = append(args, "-json")
 	}
-	args = append(args, sql)
 	cmd := exec.Command(bin, args...)
+	// A SQL argument runs before -cmd, so the busy timeout has to be stdin.
+	// The CLI default is zero, and the TUI polls the same file every frame.
+	cmd.Stdin = strings.NewReader(".timeout 5000\n" + sql + "\n")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -42,6 +44,11 @@ func sqliteRun(path, sql string, asJSON bool) (string, error) {
 		return "", fmt.Errorf("sqlite3: %s", detail)
 	}
 	return stdout.String(), nil
+}
+
+// IsBusy reports that sqlite gave up while another process held the database.
+func IsBusy(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "database is locked")
 }
 
 func queryJobs(path, sql string) ([]Job, error) {

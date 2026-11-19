@@ -21,6 +21,9 @@ func (m *model) syncDownloads() {
 	if err != nil {
 		return
 	}
+	if jobsNeedWorker(jobs) {
+		download.EnsureWorker()
+	}
 	finished := newlyFinished(m.downloads, jobs)
 	index := m.downloadIndex
 	if index < 0 || index >= len(jobs) {
@@ -62,6 +65,15 @@ func runningIndex(jobs []store.Job) int {
 		}
 	}
 	return 0
+}
+
+func jobsNeedWorker(jobs []store.Job) bool {
+	for _, job := range jobs {
+		if job.Status == "queued" || job.Status == "running" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m model) renderDownloads() string {

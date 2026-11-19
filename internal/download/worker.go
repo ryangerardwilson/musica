@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -104,15 +105,27 @@ func Resume() {
 	}
 }
 
+var (
+	spawnGate sync.Mutex
+	lastSpawn time.Time
+)
+
 // EnsureWorker starts a worker in its own session. Closing the TUI does not signal it.
 func EnsureWorker() {
 	if os.Getenv("MUSICA_NO_SPAWN") == "1" {
 		return
 	}
+	spawnGate.Lock()
+	defer spawnGate.Unlock()
 	if workerAlive() {
 		return
 	}
-	_ = spawnDetached()
+	if !lastSpawn.IsZero() && time.Since(lastSpawn) < time.Second {
+		return
+	}
+	if spawnDetached() == nil {
+		lastSpawn = time.Now()
+	}
 }
 
 func workerAlive() bool {
@@ -166,15 +179,15 @@ func RunWorker() error {
 		return err
 	}
 	defer unlockWorker()
-	db, err := store.Open()
+	db, err := openDB()
 	if err != nil {
 		return err
 	}
-	if err := db.RequeueDead(); err != nil {
+	if err := requeue(db); err != nil {
 		return err
 	}
 	for {
-		job, ok, err := db.ClaimNext()
+		job, ok, err := claimNext(db)
 		if err != nil {
 			return err
 		}
@@ -183,6 +196,33 @@ func RunWorker() error {
 		}
 		runJob(db, job)
 	}
+}
+
+func openDB() (*store.DB, error) {
+	db, err := store.Open()
+	if err == nil || !store.IsBusy(err) {
+		return db, err
+	}
+	time.Sleep(200 * time.Millisecond)
+	return store.Open()
+}
+
+func requeue(db *store.DB) error {
+	err := db.RequeueDead()
+	if err == nil || !store.IsBusy(err) {
+		return err
+	}
+	time.Sleep(200 * time.Millisecond)
+	return db.RequeueDead()
+}
+
+func claimNext(db *store.DB) (store.Job, bool, error) {
+	job, ok, err := db.ClaimNext()
+	if err == nil || !store.IsBusy(err) {
+		return job, ok, err
+	}
+	time.Sleep(200 * time.Millisecond)
+	return db.ClaimNext()
 }
 
 func runJob(db *store.DB, job store.Job) {
