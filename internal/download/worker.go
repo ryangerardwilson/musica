@@ -140,8 +140,17 @@ func workerAlive() bool {
 	return false
 }
 
+// lookPath finds the worker binary. Tests replace it.
+var lookPath = exec.LookPath
+
+// workerPath is musica on PATH. The player can run inside r2d2, so the
+// current executable is not the worker and is never a fallback.
+func workerPath() (string, error) {
+	return lookPath("musica")
+}
+
 func spawnDetached() error {
-	exe, err := os.Executable()
+	exe, err := workerPath()
 	if err != nil {
 		return err
 	}

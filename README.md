@@ -41,7 +41,8 @@ go build -o musica ./cmd/musica
 ## Command-Line Usage
 
 ```bash
-musica                         # launch the saved library
+r2d2 musica                    # launch the saved library as an r2d2 screen
+musica                         # exec r2d2 musica
 musica play /path/to/track.mp3 # launch and play this track
 musica open /path/to/music_dir # use this directory for this run
 musica config                  # open the user config in your editor

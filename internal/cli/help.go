@@ -1,6 +1,6 @@
 package cli
 
-const Usage = "Use: musica | musica play <track> | musica open <music_dir> | musica config | musica end"
+const Usage = "Use: r2d2 musica | musica play <track> | musica open <music_dir> | musica config | musica end"
 
 const HelpText = `musica terminal music player
 
@@ -15,7 +15,11 @@ global actions:
     stop playback and end the running musica session
 
 features:
-  launch the Bubble Tea music player with your saved library
+  open the Bubble Tea music player with your saved library in r2d2
+  # r2d2 musica
+  r2d2 musica
+
+  bare musica with no arguments execs r2d2 musica
   # musica
   musica
 

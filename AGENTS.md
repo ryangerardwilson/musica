@@ -82,7 +82,9 @@ Do not edit canonical specs directly to smuggle in new behavior.
 Repository: `musica` at `github.com/ryangerardwilson/musica`.
 
 musica is one Go binary. The command is `musica`. It plays a local music
-library. YouTube downloads run in a detached worker so they continue after the
+library. The player opens as the r2d2 screen `r2d2 musica` through the public
+`player` package. Bare `musica` execs `r2d2 musica`. YouTube downloads run in a
+detached `musica download-worker`, found on PATH, so they continue after the
 TUI closes. Config stays at `~/.config/musica/config.json`. An existing
 `~/.config/rlc/config.json` is copied once. The database is
 `$XDG_RUNTIME_DIR/musica/musica.sqlite`. [nebula](https://github.com/ryangerardwilson/nebula)
