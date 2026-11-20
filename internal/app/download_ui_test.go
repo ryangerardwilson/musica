@@ -116,3 +116,28 @@ func TestCompletionStillReloadsFromTheFullList(t *testing.T) {
 		t.Fatal("finished download stayed in the visible list")
 	}
 }
+
+func TestDownloadRowsWrap(t *testing.T) {
+	m := model{
+		showDownloads: true,
+		downloads: []store.Job{
+			{ID: "a", Title: "One", Status: "running"},
+			{ID: "b", Title: "Two", Status: "queued"},
+		},
+	}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	wrapped := next.(model)
+	if wrapped.downloadIndex != 1 {
+		t.Fatalf("k %d", wrapped.downloadIndex)
+	}
+	next, _ = wrapped.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	back := next.(model)
+	if back.downloadIndex != 0 {
+		t.Fatalf("j %d", back.downloadIndex)
+	}
+	empty := model{showDownloads: true}
+	next, _ = empty.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if next.(model).downloadIndex != 0 {
+		t.Fatalf("empty %d", next.(model).downloadIndex)
+	}
+}

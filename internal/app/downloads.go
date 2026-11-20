@@ -153,16 +153,16 @@ func (m model) updateDownloadKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) moveDownload(delta int) {
-	if len(m.downloads) == 0 {
+	n := len(m.downloads)
+	if n == 0 {
 		return
 	}
-	m.downloadIndex += delta
 	if m.downloadIndex < 0 {
 		m.downloadIndex = 0
+	} else if m.downloadIndex >= n {
+		m.downloadIndex = n - 1
 	}
-	if m.downloadIndex >= len(m.downloads) {
-		m.downloadIndex = len(m.downloads) - 1
-	}
+	m.downloadIndex = (m.downloadIndex + delta%n + n) % n
 }
 
 func (m *model) cancelSelectedDownload() {

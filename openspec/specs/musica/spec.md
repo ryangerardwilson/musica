@@ -45,7 +45,7 @@ musica MUST keep downloads and the saved music directory in its own sqlite file.
 
 ### Requirement: YouTube downloads continue outside the TUI
 
-From an open cassette, `y` MUST ask for a YouTube URL and then a song name. The download MUST be queued and shown in a download view whose running progress animation changes over time. The download process MUST keep running after the TUI exits and while another track is playing. Cancel from the download view MUST stop that download and MUST NOT stop other downloads or playback. `u` MUST open the download view. A download that has finished MUST leave the download view. A queued, running, failed, or cancelled download MUST stay visible. The finished audio MUST remain in the cassette.
+From an open cassette, `y` MUST ask for a YouTube URL and then a song name. The download MUST be queued and shown in a download view whose running progress animation changes over time. The download process MUST keep running after the TUI exits and while another track is playing. Cancel from the download view MUST stop that download and MUST NOT stop other downloads or playback. `u` MUST open the download view. A download that has finished MUST leave the download view. A queued, running, failed, or cancelled download MUST stay visible. The finished audio MUST remain in the cassette. `j` and `k` MUST wrap the rows in that view. On the last row, `j` MUST move to the first row. On the first row, `k` MUST move to the last row. An empty view MUST leave the cursor in place.
 
 #### Scenario: Queue a download
 
@@ -81,6 +81,13 @@ From an open cassette, `y` MUST ask for a YouTube URL and then a song name. The 
 - **WHEN** that download finishes
 - **THEN** its row MUST leave the download view
 - **AND** the audio MUST remain in the cassette
+
+#### Scenario: j and k wrap the download rows
+
+- **GIVEN** the download view lists two downloads and the cursor is on the last
+- **WHEN** the operator presses `j`
+- **THEN** the cursor MUST be on the first download
+- **AND** `k` MUST move it back to the last download
 
 ### Requirement: Pause opens the cassette menu
 
