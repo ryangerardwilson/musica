@@ -76,8 +76,36 @@ func TestDefaultRunBootstrapsConfigAndStartsApp(t *testing.T) {
 	if !called {
 		t.Fatal("runApp was not called")
 	}
-	if _, err := os.Stat(filepath.Join(tmp, "xdg", "musica", "config.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "xdg", "r2d2", "musica", "config.json")); err != nil {
 		t.Fatalf("config was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "xdg", "musica", "config.json")); !os.IsNotExist(err) {
+		t.Fatalf("old config path was written: %v", err)
+	}
+}
+
+func TestConfigAdoptsTheMusicaConfigBeforeEditing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("VISUAL", "true")
+	old := filepath.Join(tmp, "musica", "config.json")
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte(`{"music_dir": "/music/old"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Main([]string{"config"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("config exit = %d, stderr = %s", code, stderr.String())
+	}
+	body, err := os.ReadFile(filepath.Join(tmp, "r2d2", "musica", "config.json"))
+	if err != nil || string(body) != `{"music_dir": "/music/old"}` {
+		t.Fatalf("adopted %q %v", body, err)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatalf("old config was removed: %v", err)
 	}
 }
 

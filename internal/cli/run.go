@@ -83,6 +83,10 @@ func dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func runLibrary(targetMusicDir, startupTrack string, stdin io.Reader, stdout, stderr io.Writer) int {
 	configPath := config.DefaultConfigPath()
+	if err := config.AdoptLegacyConfig(configPath); err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
 	if targetMusicDir == "" {
 		if err := bootstrapFirstRunConfig(configPath, "", stdin, stdout); err != nil {
 			fmt.Fprintf(stderr, "%v\n", err)
@@ -96,9 +100,6 @@ func runLibrary(targetMusicDir, startupTrack string, stdin io.Reader, stdout, st
 }
 
 func bootstrapFirstRunConfig(configPath, cliMusicDir string, stdin io.Reader, stdout io.Writer) error {
-	if err := config.AdoptLegacyConfig(configPath); err != nil {
-		return err
-	}
 	userCfg := config.LoadUserConfig(configPath)
 	if userCfg.MusicDir != "" {
 		return nil
@@ -126,6 +127,10 @@ func bootstrapFirstRunConfig(configPath, cliMusicDir string, stdin io.Reader, st
 
 func openConfig(stderr io.Writer) int {
 	path := config.DefaultConfigPath()
+	if err := config.AdoptLegacyConfig(path); err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
 	if err := config.EnsureConfigFile(path); err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return 1

@@ -54,8 +54,8 @@ musica upgrade                 # upgrade to latest release
 
 Config defaults to:
 
-- `$XDG_CONFIG_HOME/musica/config.json` if `XDG_CONFIG_HOME` is set
-- `~/.config/musica/config.json` otherwise
+- `$XDG_CONFIG_HOME/r2d2/musica/config.json` if `XDG_CONFIG_HOME` is set
+- `~/.config/r2d2/musica/config.json` otherwise
 
 On first run, if `music_dir` is not configured, `musica` prompts for a music
 directory when stdin is interactive. Non-interactive first runs save `~/Music`.
@@ -96,8 +96,10 @@ the download view.
 
 ## Storage
 
-Config lives at `$XDG_CONFIG_HOME/musica/config.json`, or
-`~/.config/musica/config.json`. An existing rlc config is copied once.
+Config lives at `$XDG_CONFIG_HOME/r2d2/musica/config.json`, or
+`~/.config/r2d2/musica/config.json`. When that file is absent, an existing
+`~/.config/musica/config.json`, or else an rlc config, is copied once and left
+in place.
 
 Downloads and the saved music directory live in `musica.sqlite`. While the
 machine is up the file is `$XDG_RUNTIME_DIR/musica/musica.sqlite`. A set

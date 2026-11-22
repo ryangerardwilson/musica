@@ -20,15 +20,21 @@ type UserConfig struct {
 	FPS      int    `json:"fps,omitempty"`
 }
 
+// DefaultConfigPath is the one path musica reads and writes. r2d2 keeps each
+// feature's config under <config>/r2d2/<feature>/.
 func DefaultConfigPath() string {
+	return filepath.Join(configHome(), "r2d2", "musica", "config.json")
+}
+
+func configHome() string {
 	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
-		return filepath.Join(ExpandPath(base), "musica", "config.json")
+		return ExpandPath(base)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		home = "."
 	}
-	return filepath.Join(home, ".config", "musica", "config.json")
+	return filepath.Join(home, ".config")
 }
 
 func LoadUserConfig(path string) UserConfig {
@@ -87,24 +93,30 @@ func EnsureConfigFile(path string) error {
 	return os.WriteFile(path, BootstrapText(), 0o644)
 }
 
+// AdoptLegacyConfig copies an old config to path once, when path is absent.
+// It tries <config>/musica/config.json, then <config>/rlc/config.json, and
+// leaves the old file in place.
 func AdoptLegacyConfig(path string) error {
 	if path == "" {
 		path = DefaultConfigPath()
 	}
 	if _, err := os.Stat(path); err == nil {
 		return nil
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	legacy := filepath.Join(filepath.Dir(filepath.Dir(path)), "rlc", "config.json")
-	body, err := os.ReadFile(legacy)
-	if err != nil {
-		return nil
+	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	for _, name := range []string{"musica", "rlc"} {
+		body, err := os.ReadFile(filepath.Join(root, name, "config.json"))
+		if err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(path, body, 0o644)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, body, 0o644)
+	return nil
 }
 
 func BuildAppConfig(cliMusicDir string, cliFPS *int, configPath string) AppConfig {
