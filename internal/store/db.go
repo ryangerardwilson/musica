@@ -47,7 +47,7 @@ type Job struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
-// DB is the application sqlite file. When sync is set, nebula s3 stores a copy.
+// DB is the application sqlite file. When sync is set, nebula keep stores a copy.
 type DB struct {
 	path string
 	sync bool
@@ -58,15 +58,8 @@ func Open() (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	if syncRemote {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			_ = restoreObject(path)
-		}
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			return nil, err
-		}
+	if err := ensureFile(path, syncRemote); err != nil {
+		return nil, err
 	}
 	db := &DB{path: path, sync: syncRemote}
 	if err := sqliteExec(path, createSQL); err != nil {
@@ -76,6 +69,27 @@ func Open() (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// ensureFile makes a missing database file. The runtime file comes back
+// through nebula keep, which makes an empty one only when no backup exists.
+// When the backup is out of reach keep makes no file and neither does musica,
+// so an empty database never stands in for the backup. MUSICA_DB and
+// SQLX_ROOT start empty.
+func ensureFile(path string, syncRemote bool) error {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return err
+	}
+	if !syncRemote || keepSkipped() {
+		return os.WriteFile(path, nil, 0o600)
+	}
+	if err := keepRestore(path); err != nil {
+		return err
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("nebula keep restore %s: no file", keepName)
+	}
+	return nil
 }
 
 func FilePath() string {
@@ -99,11 +113,13 @@ func locate() (string, bool) {
 	return filepath.Join(base, "musica.sqlite"), true
 }
 
+// publish tells nebula keep the file changed. The upload follows in nebula's
+// own worker, and the commit stands whether or not the mark lands.
 func (db *DB) publish() {
 	if db == nil || !db.sync {
 		return
 	}
-	publishObject(db.path)
+	_ = keepMark(db.path)
 }
 
 func (db *DB) InsertJob(url, title, destDir, filename string) (Job, error) {

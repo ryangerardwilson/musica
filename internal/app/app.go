@@ -118,10 +118,21 @@ type model struct {
 
 	startupTrack string
 
-	showDownloads  bool
-	downloads      []store.Job
-	downloadIndex  int
-	trackDownloads bool
+	// The audio lane: one audioOp runs at a time and the newest request waits.
+	audioBusy    bool
+	audioWaiting bool
+	audioNext    audioOp
+	audioPending string
+	quitting     bool
+
+	showDownloads   bool
+	downloads       []store.Job // the store's last answer, replaced whole
+	downloadIntents []downloadIntent
+	downloadOps     []downloadOp
+	downloadBusy    bool
+	downloadSeq     int
+	downloadIndex   int
+	trackDownloads  bool
 }
 
 type tickMsg time.Time
@@ -173,6 +184,9 @@ func newModel(cfg config.AppConfig) model {
 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tickCmd(m.cfg.FPS)}
+	if m.trackDownloads {
+		cmds = append(cmds, func() tea.Msg { return downloadPollMsg{} })
+	}
 	if m.startupTrack != "" {
 		path := m.startupTrack
 		cmds = append(cmds, func() tea.Msg { return playMsg{path: path} })
@@ -197,40 +211,59 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case tickMsg:
-		if m.shouldAdvanceVisualizerFrame() {
-			m.visualizerFrame++
-			m.clearExpiredVisualizerTransition()
-		}
-		if m.trackDownloads {
-			m.syncDownloads()
-		}
-		if m.currentPath != "" && m.player != nil && !m.player.IsPlaying() {
-			m.playNext()
-		}
-		return m, tickCmd(m.cfg.FPS)
+		return m.tick()
 	case playMsg:
-		m.playPath(msg.path, 0)
-		return m, nil
+		cmd := m.playPath(msg.path, 0)
+		return m, cmd
+	case audioDoneMsg:
+		return m.finishAudio(msg)
+	case downloadPollMsg:
+		return m.pollDownloads()
+	case downloadDoneMsg:
+		return m.finishDownloadOp(msg)
 	case hideDisplayMsg:
 		if msg.err != nil {
 			m.status = fmt.Sprintf("hide display: %v", msg.err)
 		}
 		return m, nil
 	case endMsg:
-		m.close()
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || (m.inputKind == "" && msg.String() == "q") {
-			m.close()
-			return m, tea.Quit
-		}
-		if m.inputKind != "" {
-			return m.updateInput(msg)
-		}
-		return m.updateKey(msg)
+		return m.updateKeyMsg(msg)
 	default:
 		return m, nil
 	}
+}
+
+// tick advances the frame. It reads nothing: downloads arrive by their own
+// poll, and a track that ended starts the next one on the audio lane.
+func (m model) tick() (tea.Model, tea.Cmd) {
+	if m.shouldAdvanceVisualizerFrame() {
+		m.visualizerFrame++
+		m.clearExpiredVisualizerTransition()
+	}
+	var next tea.Cmd
+	if m.trackEnded() {
+		next = m.playNext()
+	}
+	return m, tea.Batch(tickCmd(m.cfg.FPS), next)
+}
+
+func (m model) updateKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	if m.quitting {
+		if key == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	if key == "ctrl+c" || (m.inputKind == "" && key == "q") {
+		return m.quit()
+	}
+	if m.inputKind != "" {
+		return m.updateInput(msg)
+	}
+	return m.updateKey(msg)
 }
 
 func (m model) shouldAdvanceVisualizerFrame() bool {
@@ -238,6 +271,9 @@ func (m model) shouldAdvanceVisualizerFrame() bool {
 }
 
 func (m *model) togglePause() {
+	if m.audioBusy {
+		return // the track is starting or stopping
+	}
 	if m.player == nil {
 		m.status = "nothing is playing"
 		return
@@ -271,19 +307,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.leader {
-		m.leaderSeq += key
-		switch {
-		case m.leaderSeq == "rn":
-			m.leader = false
-			m.leaderSeq = ""
-			m.beginRename()
-		case strings.HasPrefix("rn", m.leaderSeq):
-			m.status = ",rn rename"
-		default:
-			m.leader = false
-			m.leaderSeq = ""
-			m.status = "unknown leader action"
-		}
+		m.updateLeader(key)
 		return m, nil
 	}
 	if m.showDownloads {
@@ -297,6 +321,10 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if cmd, ok := m.playbackKey(key); ok {
+		return m, cmd
+	}
+	var cmd tea.Cmd
 	switch key {
 	case "up", "left", "k", "h":
 		m.moveSelection(-1)
@@ -311,39 +339,13 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return hideDisplayMsg{err: hideDisplay()} }
 		}
 		m.goBack()
-	case "enter":
-		m.activateSelected()
-	case " ":
-		m.togglePause()
-	case "f":
-		if err := m.seekCurrent(10 * time.Second); err != nil {
-			m.status = err.Error()
-		} else {
-			m.status = "seek +10s"
-		}
-	case "b":
-		if err := m.seekCurrent(-10 * time.Second); err != nil {
-			m.status = err.Error()
-		} else {
-			m.status = "seek -10s"
-		}
-	case "r":
-		if err := m.restartCurrent(); err != nil {
-			m.status = err.Error()
-		} else {
-			m.status = "restart"
-		}
-	case "x":
-		m.stopPlayback("stopped")
 	case "s":
 		m.shuffleCurrent()
 	case "/":
 		m.beginInput(inputSearch, "/")
 	case "u":
 		m.showDownloads = true
-		if m.trackDownloads {
-			m.syncDownloads()
-		}
+		cmd = m.refreshDownloads()
 	case "y":
 		m.beginYouTubeDownload()
 	case "n":
@@ -365,13 +367,51 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		if m.deleteArmed {
 			m.deleteArmed = false
-			m.deleteSelected()
+			cmd = m.deleteSelected()
 		} else {
 			m.deleteArmed = true
 			m.status = "press d again to delete"
 		}
 	}
-	return m, nil
+	return m, cmd
+}
+
+// playbackKey handles enter and the transport keys. Each one that changes
+// ffplay returns its op for the audio lane.
+func (m *model) playbackKey(key string) (tea.Cmd, bool) {
+	switch key {
+	case "enter":
+		return m.activateSelected(), true
+	case " ":
+		m.togglePause()
+		return nil, true
+	case "f":
+		return m.seekCurrent(10*time.Second, "seek +10s"), true
+	case "b":
+		return m.seekCurrent(-10*time.Second, "seek -10s"), true
+	case "r":
+		return m.restartCurrent(), true
+	case "x":
+		return m.stopPlayback("stopped"), true
+	default:
+		return nil, false
+	}
+}
+
+func (m *model) updateLeader(key string) {
+	m.leaderSeq += key
+	switch {
+	case m.leaderSeq == "rn":
+		m.leader = false
+		m.leaderSeq = ""
+		m.beginRename()
+	case strings.HasPrefix("rn", m.leaderSeq):
+		m.status = ",rn rename"
+	default:
+		m.leader = false
+		m.leaderSeq = ""
+		m.status = "unknown leader action"
+	}
 }
 
 func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -383,8 +423,8 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = "cancelled"
 		return m, nil
 	case "enter":
-		m.commitInput()
-		return m, nil
+		cmd := m.commitInput()
+		return m, cmd
 	case "backspace", "ctrl+h":
 		m.input = trimLastRune(m.input)
 		return m, nil
@@ -399,7 +439,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *model) commitInput() {
+func (m *model) commitInput() tea.Cmd {
 	value := strings.TrimSpace(m.input)
 	kind := m.inputKind
 	m.inputKind = ""
@@ -409,7 +449,7 @@ func (m *model) commitInput() {
 	case inputSearch:
 		if value == "" {
 			m.status = "empty search"
-			return
+			return nil
 		}
 		m.search = value
 		if !m.findSearch(1) {
@@ -422,8 +462,9 @@ func (m *model) commitInput() {
 	case inputYouTubeURL:
 		m.commitYouTubeURL(value)
 	case inputYouTubeName:
-		m.commitYouTubeName(value)
+		return m.commitYouTubeName(value)
 	}
+	return nil
 }
 
 func (m *model) commitYouTubeURL(value string) {
@@ -441,14 +482,15 @@ func (m *model) commitYouTubeURL(value string) {
 	m.status = "song name"
 }
 
-func (m *model) commitYouTubeName(value string) {
+func (m *model) commitYouTubeName(value string) tea.Cmd {
 	name := safeBaseName(value)
 	if name == "" {
 		m.keepInput(inputYouTubeName, value, "missing song name")
-		return
+		return nil
 	}
-	m.downloadYouTube(name, m.youtubeURL)
+	cmd := m.downloadYouTube(name, m.youtubeURL)
 	m.youtubeURL = ""
+	return cmd
 }
 
 func (m *model) keepInput(kind, value, status string) {
@@ -507,7 +549,7 @@ func (m *model) moveTrack(delta int) {
 	m.status = "moved"
 }
 
-func (m *model) activateSelected() {
+func (m *model) activateSelected() tea.Cmd {
 	switch m.view {
 	case rootView:
 		if m.selected < len(m.playlists) {
@@ -520,21 +562,22 @@ func (m *model) activateSelected() {
 			m.view = tracksView
 			m.selected = 0
 			m.status = "cassette " + playlist.Name
-			return
+			return nil
 		}
 		rootTrackIndex := m.selected - len(m.playlists)
 		if rootTrackIndex >= 0 && rootTrackIndex < len(m.rootTracks) {
 			m.queue = append([]library.Track(nil), m.rootTracks...)
 			m.currentIndex = rootTrackIndex
-			m.playPath(m.rootTracks[rootTrackIndex].Path, 0)
+			return m.playPath(m.rootTracks[rootTrackIndex].Path, 0)
 		}
 	case tracksView:
 		if m.selected >= 0 && m.selected < len(m.tracks) {
 			m.queue = append([]library.Track(nil), m.tracks...)
 			m.currentIndex = m.selected
-			m.playPath(m.tracks[m.selected].Path, 0)
+			return m.playPath(m.tracks[m.selected].Path, 0)
 		}
 	}
+	return nil
 }
 
 func (m *model) goBack() {
@@ -560,50 +603,48 @@ func (m *model) restoreCassetteSelection() {
 	m.selected = m.cassetteSelected
 }
 
-func (m *model) playPath(path string, offset time.Duration) {
-	if m.player == nil {
-		m.status = "player unavailable"
-		return
-	}
-	previousPath := m.currentPath
-	previousLevels, previousPeaks := m.visualizerLevels()
-	isTrackChange := previousPath != "" && !samePath(previousPath, path)
-	if err := m.player.Play(path, offset); err != nil {
-		m.status = err.Error()
-		return
-	}
-	_ = m.visualizer.Start(path, offset)
-	m.currentPath = path
-	m.showMenu = false
-	m.visualizerStartFrame = m.visualizerFrame
-	if isTrackChange {
-		m.beginVisualizerTransition(previousLevels, previousPeaks)
-	} else {
-		m.clearVisualizerTransition()
-	}
-	m.status = "playing"
+// playPath starts path on the audio lane. The track change fade starts from
+// the levels showing now.
+func (m *model) playPath(path string, offset time.Duration) tea.Cmd {
+	return m.startTrack(path, offset, "playing")
 }
 
-func (m *model) playNext() {
+func (m *model) startTrack(path string, offset time.Duration, done string) tea.Cmd {
+	if m.player == nil {
+		m.status = "player unavailable"
+		return nil
+	}
+	levels, peaks := m.visualizerLevels()
+	return m.queueAudio(audioOp{
+		path:    path,
+		offset:  offset,
+		pending: "starting…",
+		done:    done,
+		from:    m.currentPath,
+		levels:  levels,
+		peaks:   peaks,
+	})
+}
+
+func (m *model) playNext() tea.Cmd {
 	if len(m.queue) == 0 {
-		m.visualizer.Stop()
-		m.currentPath = ""
-		m.clearVisualizerTransition()
-		return
+		return m.queueAudio(audioOp{})
 	}
 	next := m.currentIndex + 1
 	if next >= len(m.queue) {
-		m.visualizer.Stop()
-		m.currentPath = ""
-		m.clearVisualizerTransition()
-		m.status = "queue finished"
-		return
+		return m.queueAudio(audioOp{done: "queue finished"})
 	}
 	m.currentIndex = next
-	m.playPath(m.queue[next].Path, 0)
+	return m.playPath(m.queue[next].Path, 0)
 }
 
-func (m *model) seekCurrent(delta time.Duration) error {
+// seekCurrent starts the playing track again delta from where it is. While
+// an op runs the position is not known, so the key does nothing.
+func (m *model) seekCurrent(delta time.Duration, done string) tea.Cmd {
+	if m.audioBusy {
+		return nil
+	}
+	m.status = done
 	if m.player == nil {
 		return nil
 	}
@@ -615,15 +656,14 @@ func (m *model) seekCurrent(delta time.Duration) error {
 	if offset < 0 {
 		offset = 0
 	}
-	if err := m.player.Play(path, offset); err != nil {
-		return err
-	}
-	_ = m.visualizer.Start(path, offset)
-	m.currentPath = path
-	return nil
+	return m.queueAudio(audioOp{path: path, offset: offset, seek: true, pending: "seeking…", done: done})
 }
 
-func (m *model) restartCurrent() error {
+func (m *model) restartCurrent() tea.Cmd {
+	if m.audioBusy {
+		return nil
+	}
+	m.status = "restart"
 	if m.player == nil {
 		return nil
 	}
@@ -631,25 +671,13 @@ func (m *model) restartCurrent() error {
 	if path == "" {
 		return nil
 	}
-	m.playPath(path, 0)
-	return nil
+	return m.startTrack(path, 0, "restart")
 }
 
-func (m *model) stopPlayback(status string) {
-	if m.player != nil {
-		m.player.Stop()
-	}
-	m.visualizer.Stop()
-	m.currentPath = ""
-	m.clearVisualizerTransition()
-	m.status = status
-}
-
-func (m model) close() {
-	if m.player != nil {
-		m.player.Stop()
-	}
-	m.visualizer.Stop()
+// stopPlayback paints "stopping…" and stops ffplay and ffmpeg on the audio
+// lane; status shows once they have exited.
+func (m *model) stopPlayback(status string) tea.Cmd {
+	return m.queueAudio(audioOp{pending: "stopping…", done: status})
 }
 
 func (m *model) shuffleCurrent() {
@@ -752,36 +780,28 @@ func (m *model) renameSelected(name string) {
 	m.status = "renamed"
 }
 
-func (m *model) downloadYouTube(name, rawURL string) {
+func (m *model) downloadYouTube(name, rawURL string) tea.Cmd {
 	if m.view != tracksView || m.currentPlaylist == "" {
 		m.status = "open a cassette first"
-		return
+		return nil
 	}
 	if name == "" {
 		m.status = "missing song name"
-		return
+		return nil
 	}
-	if err := enqueueDownload(m.currentPlaylist, name, rawURL); err != nil {
-		m.status = err.Error()
-		return
-	}
-	m.showDownloads = true
-	m.status = "downloading " + name
-	if m.trackDownloads {
-		m.syncDownloads()
-	}
+	return m.queueYouTube(m.currentPlaylist, name, rawURL)
 }
 
-func (m *model) deleteSelected() {
+func (m *model) deleteSelected() tea.Cmd {
 	path, ok := m.selectedPath()
 	if !ok {
 		m.status = "nothing to delete"
-		return
+		return nil
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		m.status = err.Error()
-		return
+		return nil
 	}
 	kind := "track"
 	if info.IsDir() {
@@ -792,10 +812,7 @@ func (m *model) deleteSelected() {
 	}
 	if err != nil {
 		m.status = err.Error()
-		return
-	}
-	if samePath(m.currentPath, path) {
-		m.stopPlayback("stopped")
+		return nil
 	}
 	if m.view == rootView {
 		m.reloadRoot()
@@ -803,6 +820,10 @@ func (m *model) deleteSelected() {
 		m.reloadTracks()
 	}
 	m.status = "deleted " + kind + " " + filepath.Base(path)
+	if samePath(m.currentPath, path) {
+		return m.stopPlayback(m.status)
+	}
+	return nil
 }
 
 func (m *model) findSearch(direction int) bool {
@@ -1418,6 +1439,9 @@ func (m model) itemSubject(index int) (string, bool) {
 }
 
 func (m model) playingFieldText() string {
+	if m.audioPending != "" {
+		return m.audioPending
+	}
 	if m.player == nil {
 		return "idle"
 	}

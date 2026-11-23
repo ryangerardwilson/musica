@@ -2,11 +2,16 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+// sqliteWait bounds one sqlite3 run. Its busy timeout is 5 s.
+const sqliteWait = 15 * time.Second
 
 func sqliteBin() (string, error) {
 	if path, err := exec.LookPath("sqlite3"); err == nil {
@@ -29,9 +34,12 @@ func sqliteRun(path, sql string, asJSON bool) (string, error) {
 	if asJSON {
 		args = append(args, "-json")
 	}
-	cmd := exec.Command(bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), sqliteWait)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
 	// A SQL argument runs before -cmd, so the busy timeout has to be stdin.
-	// The CLI default is zero, and the TUI polls the same file every frame.
+	// The CLI default is zero, and the TUI lists the same file twice a second
+	// while the worker writes progress.
 	cmd.Stdin = strings.NewReader(".timeout 5000\n" + sql + "\n")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

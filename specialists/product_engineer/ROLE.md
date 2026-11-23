@@ -23,7 +23,7 @@ repo-local operating constraints.
 - `musica` is a terminal-native local music player for a saved music library.
 - Preserve the narrow loop: launch the saved library, open a directory for one run, play one track directly, or edit the user config.
 - Do not grow this into a streaming service, library daemon, or web UI unless the user explicitly asks.
-- Download jobs and the saved library path live in sqlite. nebula `s3` backs up `s3://backups/musica.sqlite`. Audio files stay in the music directory.
+- Download jobs and the saved library path live in sqlite. nebula `keep` backs up `s3://backups/musica.sqlite`. Audio files stay in the music directory.
 - `y` queues a YouTube audio download. The worker keeps running after the TUI closes or other tracks play. Cancel only from the download view.
 
 ## Command Surface

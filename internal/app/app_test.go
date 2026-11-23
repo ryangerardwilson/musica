@@ -822,7 +822,8 @@ func TestPlayPathStatusOmitsTrackName(t *testing.T) {
 		visualizer: &visualizer.Analyzer{},
 	}
 
-	m.playPath("/music/blue-monday.mp3", 0)
+	cmd := m.playPath("/music/blue-monday.mp3", 0)
+	m = land(t, m, cmd)
 
 	if m.status != "playing" {
 		t.Fatalf("status = %q, want playing without track name", m.status)
@@ -839,7 +840,8 @@ func TestPlayPathClosesMenuAfterSuccessfulPlayback(t *testing.T) {
 		showMenu:   true,
 	}
 
-	m.playPath("/music/blue-monday.mp3", 0)
+	cmd := m.playPath("/music/blue-monday.mp3", 0)
+	m = land(t, m, cmd)
 
 	if m.showMenu {
 		t.Fatalf("showMenu = true, want menu closed after playback starts")
@@ -853,7 +855,8 @@ func TestPlayPathKeepsMenuOpenAfterPlaybackError(t *testing.T) {
 		showMenu:   true,
 	}
 
-	m.playPath("/music/blue-monday.mp3", 0)
+	cmd := m.playPath("/music/blue-monday.mp3", 0)
+	m = land(t, m, cmd)
 
 	if !m.showMenu {
 		t.Fatalf("showMenu = false, want menu to remain open after playback error")
@@ -867,7 +870,8 @@ func TestPlayPathStartsVisualizerEase(t *testing.T) {
 		visualizerFrame: 42,
 	}
 
-	m.playPath("/music/blue-monday.mp3", 0)
+	cmd := m.playPath("/music/blue-monday.mp3", 0)
+	m = land(t, m, cmd)
 
 	if m.visualizerStartFrame != 42 {
 		t.Fatalf("visualizerStartFrame = %d, want current frame 42", m.visualizerStartFrame)
@@ -890,7 +894,8 @@ func TestPlayPathStartsTrackChangeTransition(t *testing.T) {
 		visualizerFrame: 90,
 	}
 
-	m.playPath("/music/new-song.mp3", 0)
+	cmd := m.playPath("/music/new-song.mp3", 0)
+	m = land(t, m, cmd)
 
 	if !m.visualizerTransitionActive {
 		t.Fatalf("visualizerTransitionActive = false, want true when changing songs")
@@ -908,7 +913,8 @@ func TestPlayPathDoesNotUseTrackChangeTransitionForSameSong(t *testing.T) {
 		visualizerTransitionActive: true,
 	}
 
-	m.playPath("/music/current-song.mp3", 0)
+	cmd := m.playPath("/music/current-song.mp3", 0)
+	m = land(t, m, cmd)
 
 	if m.visualizerTransitionActive {
 		t.Fatalf("visualizerTransitionActive = true, want false when restarting same song")
@@ -1144,8 +1150,12 @@ func TestYouTubeNameModalDownloadsTrack(t *testing.T) {
 		youtubeURL:      "https://youtu.be/example",
 	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	updated := next.(model)
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	painted := next.(model)
+	if gotURL != "" {
+		t.Fatal("the download was queued inside Update")
+	}
+	updated := land(t, painted, cmd)
 	if updated.inputKind != "" || updated.youtubeURL != "" {
 		t.Fatalf("modal state after download = inputKind %q url %q, want cleared", updated.inputKind, updated.youtubeURL)
 	}

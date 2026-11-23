@@ -40,8 +40,11 @@ func TestDownloadViewAnimatesAndCancelLeavesPlayback(t *testing.T) {
 		t.Fatalf("view = %s", first)
 	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	updated := next.(model)
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if cancelled != "" {
+		t.Fatal("the cancel ran inside Update")
+	}
+	updated := land(t, next.(model), cmd)
 	if cancelled != "a" {
 		t.Fatalf("cancelled %q", cancelled)
 	}

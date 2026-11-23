@@ -3,7 +3,7 @@ schema: spec-driven
 context: |
   musica is a Go terminal music player. The command is musica.
   Playback reads a local music directory. Download jobs and the saved
-  music directory live in musica's own sqlite file. nebula s3 backs that
+  music directory live in musica's own sqlite file. nebula keep backs that
   file up at s3://backups/musica.sqlite. Audio files stay in the music
   directory. Config stays at ~/.config/musica/config.json.
 

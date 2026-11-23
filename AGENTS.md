@@ -89,7 +89,7 @@ TUI closes. Config stays at `~/.config/r2d2/musica/config.json`. When it is
 absent, an existing `~/.config/musica/config.json`, or else
 `~/.config/rlc/config.json`, is copied once. The database is
 `$XDG_RUNTIME_DIR/musica/musica.sqlite`. [nebula](https://github.com/ryangerardwilson/nebula)
-`s3` backs that file up at `s3://backups/musica.sqlite`.
+`keep` backs that file up at `s3://backups/musica.sqlite`.
 
 Do not add this module to the home `go.work`. Test with `GOWORK=off go test ./...`.
 Work and commit inside this Git root.

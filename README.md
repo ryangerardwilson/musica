@@ -3,7 +3,7 @@
 `musica` is a terminal-native local music player written in Go with a Bubble Tea
 TUI, analog-shaped `ffplay` playback, and an `ffmpeg`-powered ASCII visualizer.
 It keeps download jobs and the saved library path in its own sqlite file.
-[nebula](https://github.com/ryangerardwilson/nebula) `s3` backs that file up.
+[nebula](https://github.com/ryangerardwilson/nebula) `keep` backs that file up.
 
 It keeps the narrow local-file loop: launch the saved library, open a directory
 for one run, play a track directly, or edit the user config.
@@ -103,9 +103,13 @@ in place.
 
 Downloads and the saved music directory live in `musica.sqlite`. While the
 machine is up the file is `$XDG_RUNTIME_DIR/musica/musica.sqlite`. A set
-`SQLX_ROOT` keeps it at `$SQLX_ROOT/data/musica.sqlite` and skips s3. nebula
-`s3` stores the backup at `s3://backups/musica.sqlite`. Audio files stay in
-the music directory.
+`SQLX_ROOT` keeps it at `$SQLX_ROOT/data/musica.sqlite` and skips the backup.
+nebula keep stores the backup at `s3://backups/musica.sqlite`: musica runs
+`nebula keep mark musica <file>` after each change it records and
+`nebula keep restore musica <file>` when the file is missing. When the backup
+cannot be reached, musica makes no empty file in its place. `NEBULA_BIN`
+names the nebula binary; otherwise `nebula` is found on `PATH`. Audio files
+stay in the music directory.
 
 ## Requirements
 
@@ -125,6 +129,6 @@ missing executable.
 - `internal/config/` - user config path, load/save, first-run defaults
 - `internal/library/` - cassette directory and local music scanning
 - `internal/download/` - background YouTube downloads and the progress view
-- `internal/store/` - sqlite state and nebula s3 backup
+- `internal/store/` - sqlite state and nebula keep backup
 - `internal/player/` - `ffplay` process backend
 - `internal/visualizer/` - `ffmpeg` spectrum analyzer and ASCII renderer
