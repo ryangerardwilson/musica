@@ -133,6 +133,18 @@ type model struct {
 	downloadSeq     int
 	downloadIndex   int
 	trackDownloads  bool
+
+	// leave is set when musica serve runs the model: m, and Escape from
+	// anywhere, ask the Tesseract center to close instead of toggling the
+	// menu or hiding a terminal, and h goes back to the cassette list.
+	leave func()
+	// held is the track an ended session had loaded. musica serve shows it
+	// paused until a track is played or playback is stopped, and never starts
+	// it.
+	held string
+	// thump is the hardest kick the analyzer heard by the last update, as
+	// musica serve took it for that update's frame.
+	thump float64
 }
 
 type tickMsg time.Time
@@ -260,6 +272,12 @@ func (m model) updateKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if key == "ctrl+c" || (m.inputKind == "" && key == "q") {
 		return m.quit()
 	}
+	// In musica serve, Escape asks the center to close from anywhere and
+	// backs out of nothing: a prompt, help, the download view, and a
+	// cassette's tracks stay as they are for the next showing.
+	if m.leave != nil && key == "esc" {
+		return m, m.hideCmd()
+	}
 	if m.inputKind != "" {
 		return m.updateInput(msg)
 	}
@@ -280,12 +298,20 @@ func (m *model) togglePause() {
 	}
 	if path, _ := m.player.State(); path == "" {
 		m.status = "nothing is playing"
+		if m.held != "" {
+			m.status = "nothing to resume; enter plays from the start"
+		}
 		return
 	}
 	paused := m.player.TogglePause()
 	m.visualizer.SetPaused(paused)
 	if !paused {
 		m.status = "playing"
+		// The center draws the animation only while the menu is closed.
+		// Resume puts that picture back. The terminal player leaves the menu.
+		if m.leave != nil {
+			m.showMenu = false
+		}
 		return
 	}
 	m.status = "paused"
@@ -298,6 +324,9 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "?" {
 		m.showHelp = !m.showHelp
+		return m, nil
+	}
+	if m.servedBack(key) {
 		return m, nil
 	}
 	if m.showHelp {
@@ -317,8 +346,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.deleteArmed = false
 	}
 	if key == "m" {
-		m.showMenu = !m.showMenu
-		return m, nil
+		return m.toggleMenu()
 	}
 
 	if cmd, ok := m.playbackKey(key); ok {
@@ -336,7 +364,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveTrack(1)
 	case "esc":
 		if m.view == rootView {
-			return m, func() tea.Msg { return hideDisplayMsg{err: hideDisplay()} }
+			return m, m.hideCmd()
 		}
 		m.goBack()
 	case "s":
@@ -374,6 +402,34 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+// toggleMenu shows or hides the cassette menu. In musica serve, m asks the
+// Tesseract center to close instead.
+func (m model) toggleMenu() (tea.Model, tea.Cmd) {
+	if m.leave != nil {
+		return m, m.leaveCmd()
+	}
+	m.showMenu = !m.showMenu
+	return m, nil
+}
+
+// hideCmd puts the player out of sight and leaves playback going: the
+// terminal popup runs MUSICA_HIDE_COMMAND, and musica serve asks the
+// Tesseract center to close.
+func (m model) hideCmd() tea.Cmd {
+	if m.leave != nil {
+		return m.leaveCmd()
+	}
+	return func() tea.Msg { return hideDisplayMsg{err: hideDisplay()} }
+}
+
+func (m model) leaveCmd() tea.Cmd {
+	leave := m.leave
+	return func() tea.Msg {
+		leave()
+		return nil
+	}
 }
 
 // playbackKey handles enter and the transport keys. Each one that changes
@@ -590,6 +646,25 @@ func (m *model) goBack() {
 		m.clampSelection()
 		m.status = "cassettes"
 	}
+}
+
+// servedBack is h in musica serve from a cassette's tracks, help, or the
+// download view: it shows the cassette list with the open cassette selected.
+// Anywhere else, on the cassette list or over the picture, it reports false
+// and h moves the selection as it does in the TUI.
+func (m *model) servedBack(key string) bool {
+	if key != "h" || m.leave == nil || m.leader {
+		return false
+	}
+	if !m.showHelp && !m.showDownloads && (!m.showMenu || m.view != tracksView) {
+		return false
+	}
+	m.showHelp = false
+	m.showDownloads = false
+	m.deleteArmed = false
+	m.goBack()
+	m.showMenu = true
+	return true
 }
 
 func (m *model) restoreCassetteSelection() {

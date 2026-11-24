@@ -1,6 +1,6 @@
 package cli
 
-const Usage = "Use: r2d2 musica | musica play <track> | musica open <music_dir> | musica config | musica end"
+const Usage = "Use: musica | r2d2 musica | musica serve | musica play <track> | musica open <music_dir> | musica config | musica end"
 
 const HelpText = `musica terminal music player
 
@@ -12,22 +12,24 @@ global actions:
   musica upgrade
     upgrade to the latest release
   musica end
-    stop playback and end the running musica session
+    stop playback, end the running musica session, and wait until it lets go;
+    the next musica serve opens the cassette it had loaded, paused
 
 features:
-  open the Bubble Tea music player with your saved library in r2d2
-  # r2d2 musica
+  show your saved library in the Tesseract Musica center, the third center of Super+T
+  # musica | r2d2 musica
+  musica
   r2d2 musica
 
-  bare musica with no arguments execs r2d2 musica
-  # musica
-  musica
+  run the player for that center with no terminal; the launcher starts it
+  # serve
+  musica serve
 
-  play a specific track immediately
+  play a specific track immediately in the terminal player
   # play <track>
   musica play ~/Music/song.mp3
 
-  use a directory for this run without changing saved config
+  use a directory for one run of the terminal player without changing saved config
   # open <music_dir>
   musica open ~/Music
 

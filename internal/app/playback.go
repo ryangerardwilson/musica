@@ -29,8 +29,9 @@ type audioDoneMsg struct {
 }
 
 // queueAudio paints op's pending status and runs it, or keeps it as the next
-// op while another runs.
+// op while another runs. A play or a stop replaces a held track.
 func (m *model) queueAudio(op audioOp) tea.Cmd {
+	m.held = ""
 	m.audioPending = op.pending
 	if op.pending != "" {
 		m.status = op.pending

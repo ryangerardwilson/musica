@@ -8,6 +8,12 @@ It keeps download jobs and the saved library path in its own sqlite file.
 It keeps the narrow local-file loop: launch the saved library, open a directory
 for one run, play a track directly, or edit the user config.
 
+The saved library opens in the Tesseract Musica center, the third center of the
+Super+T launcher, next to the tmux sessions and the space navigator. The
+launcher runs `musica serve`, which plays with no terminal, and draws the
+center from what that session streams over its control socket. The terminal
+TUI is still what `musica play` and `musica open` show.
+
 Playback always runs through a light analog-style filter chain for EQ,
 compression, soft clipping, and limiting.
 
@@ -41,12 +47,13 @@ go build -o musica ./cmd/musica
 ## Command-Line Usage
 
 ```bash
-r2d2 musica                    # launch the saved library as an r2d2 screen
-musica                         # exec r2d2 musica
-musica play /path/to/track.mp3 # launch and play this track
-musica open /path/to/music_dir # use this directory for this run
+musica                         # show the saved library in the Tesseract Musica center
+r2d2 musica                    # the same, through the player package
+musica serve                   # play for that center with no terminal; the launcher starts it
+musica play /path/to/track.mp3 # play this track in the terminal TUI
+musica open /path/to/music_dir # use this directory for one terminal run
 musica config                  # open the user config in your editor
-musica end                     # stop playback and end the running session
+musica end                     # stop playback, end the running session, and wait until it lets go
 musica help                    # show help
 musica version                 # print version
 musica upgrade                 # upgrade to latest release
@@ -72,8 +79,9 @@ directory when stdin is interactive. Non-interactive first runs save `~/Music`.
 - `h` / `l` / `j` / `k` - move across cassettes or tracks
 - `Ctrl+j` / `Ctrl+k` - move selected track down/up in the current in-memory order
 - `Enter` - open selected cassette or play selected track
-- `Esc` - return to cassettes; from the cassette menu, hide the overlay while playback continues
-- `m` - toggle the cassette and track menu, which opens by default
+- `Esc` - return to cassettes; from the cassette list, hide the player while playback continues. In the Tesseract center Escape closes the menu from anywhere and backs out of nothing
+- `m` - toggle the cassette and track menu, which opens by default; in the Tesseract center, leave Musica
+- `h` in the Tesseract center - back to the cassette list from a cassette's tracks, help, or the download view; on the cassette list it moves up
 - `Space` - pause and open the cassette menu; press again to resume
 - `f` / `b` - seek forward/backward by 10 seconds
 - `r` - restart the current track
@@ -93,6 +101,34 @@ directory when stdin is interactive. Non-interactive first runs save `~/Music`.
 YouTube downloads prompt for the URL first, then the song name. The download
 keeps running after the TUI closes and while other tracks play. Cancel it from
 the download view.
+
+## Control Socket
+
+The running session holds `$XDG_RUNTIME_DIR/musica/control.sock`. `musica end`
+writes `end` to it. A `musica serve` session also takes `watch`: the client
+then reads one JSON object per line. A `frame` follows each player update with
+the playing state, elapsed time, and title, the status line, up to nine rows
+around the selection, the open prompt, help, the download rows, and the
+visualizer's 32 `levels` and `peaks` with `bass`, `energy`, and `thump`, each
+from 0 to 1. `thump` is the hardest low-end hit since the frame before, not
+eased, so a kick is near 1 on its frame and gone on the next, and a held tone
+hits only as it starts. `leave` comes when `m`, or Escape from anywhere, asks
+the center to close; playback goes on, and Escape backs out of nothing there.
+`ended` comes when the session ends. Each line the client writes after `watch`
+is a key such as `{"key":"j"}` or `{"key":"h"}`, read with the TUI's rules,
+except that `h` goes back to the cassette list from a cassette's tracks, help,
+or the download view. The terminal TUI answers `watch` with `unknown command`.
+
+`musica end` returns once the session has let go of its lock, so a
+`musica serve` started next takes the session at once. Before it sends `end` it
+notes the track the session's ffplay has loaded, playing or paused, in
+`$XDG_RUNTIME_DIR/musica/held`; a terminal session from an older musica only
+answers `end`, so the track is read from its ffplay child in `/proc`. The next
+`musica serve` takes that note: it opens the track's cassette with the track
+selected and shown paused, and does not start it, because where the ended
+session was in the track is not known. Enter plays it from the start. The
+Tesseract center uses this when a terminal holds the session: it runs
+`musica end`, then `musica serve`.
 
 ## Storage
 
@@ -125,7 +161,8 @@ missing executable.
 
 - `cmd/musica/` - executable entrypoint
 - `internal/cli/` - command dispatch, config opening, and upgrade handoff
-- `internal/app/` - Bubble Tea TUI
+- `internal/app/` - Bubble Tea player model: the terminal TUI and `musica serve`
+- `internal/session/` - the session lock and the control socket
 - `internal/config/` - user config path, load/save, first-run defaults
 - `internal/library/` - cassette directory and local music scanning
 - `internal/download/` - background YouTube downloads and the progress view

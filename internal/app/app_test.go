@@ -470,6 +470,33 @@ func TestPauseOpensMenuAndResumeLeavesIt(t *testing.T) {
 	}
 }
 
+func TestServeResumeClosesTheMenu(t *testing.T) {
+	player := &fakeAudioPlayer{path: "/music/live.mp3", playing: true}
+	m := model{
+		player:     player,
+		visualizer: visualizer.New(4),
+		leave:      func() {},
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	paused := next.(model)
+	if !player.IsPaused() || !paused.showMenu {
+		t.Fatalf("pause: paused %v menu %v", player.IsPaused(), paused.showMenu)
+	}
+
+	next, _ = paused.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	resumed := next.(model)
+	if player.IsPaused() {
+		t.Fatal("second space did not resume")
+	}
+	if resumed.showMenu {
+		t.Fatal("resume left the menu over the picture")
+	}
+	if state, _, _ := resumed.nowPlaying(); state != "playing" {
+		t.Fatalf("state = %q, want playing", state)
+	}
+}
+
 func TestPauseWithoutTrackDoesNotOpenMenu(t *testing.T) {
 	m := model{player: &fakeAudioPlayer{}, visualizer: visualizer.New(4)}
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})

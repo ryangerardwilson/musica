@@ -20,6 +20,7 @@ import (
 const installScriptURL = "https://raw.githubusercontent.com/ryangerardwilson/musica/main/install.sh"
 
 var runApp = app.Run
+var serveApp = app.Serve
 var endSession = session.End
 
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -56,7 +57,9 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 func dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0:
-		return runLibrary("", "", stdin, stdout, stderr)
+		return openCenter(stderr)
+	case sameArgs(args, "serve"):
+		return runLibrary("", "", serveApp, stdin, stdout, stderr)
 	case sameArgs(args, "config"):
 		return openConfig(stderr)
 	case len(args) == 2 && args[0] == "play":
@@ -66,7 +69,7 @@ func dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "Track not found: %s\n", track)
 			return 1
 		}
-		return runLibrary(filepath.Dir(track), track, stdin, stdout, stderr)
+		return runLibrary(filepath.Dir(track), track, runApp, stdin, stdout, stderr)
 	case len(args) == 2 && args[0] == "open":
 		musicDir := config.AbsPath(args[1])
 		info, err := os.Stat(musicDir)
@@ -74,14 +77,16 @@ func dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "Music directory not found: %s\n", musicDir)
 			return 1
 		}
-		return runLibrary(musicDir, "", stdin, stdout, stderr)
+		return runLibrary(musicDir, "", runApp, stdin, stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, Usage)
 		return 1
 	}
 }
 
-func runLibrary(targetMusicDir, startupTrack string, stdin io.Reader, stdout, stderr io.Writer) int {
+// runLibrary builds the config for the saved library, or for targetMusicDir
+// this run, and runs it: the terminal TUI or musica serve.
+func runLibrary(targetMusicDir, startupTrack string, run func(config.AppConfig) int, stdin io.Reader, stdout, stderr io.Writer) int {
 	configPath := config.DefaultConfigPath()
 	if err := config.AdoptLegacyConfig(configPath); err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
@@ -96,7 +101,7 @@ func runLibrary(targetMusicDir, startupTrack string, stdin io.Reader, stdout, st
 	appConfig := config.BuildAppConfig(targetMusicDir, nil, configPath)
 	appConfig.StartupTrack = startupTrack
 	_ = store.RememberMusicDir(appConfig.MusicDir)
-	return runApp(appConfig)
+	return run(appConfig)
 }
 
 func bootstrapFirstRunConfig(configPath, cliMusicDir string, stdin io.Reader, stdout io.Writer) error {

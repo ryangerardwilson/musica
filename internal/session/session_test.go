@@ -20,6 +20,7 @@ func TestEndRequestsRunningSessionToExit(t *testing.T) {
 
 	select {
 	case <-server.EndRequests():
+		server.Close()
 	case <-time.After(time.Second):
 		t.Fatal("server did not receive end request")
 	}

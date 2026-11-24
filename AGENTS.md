@@ -82,8 +82,14 @@ Do not edit canonical specs directly to smuggle in new behavior.
 Repository: `musica` at `github.com/ryangerardwilson/musica`.
 
 musica is one Go binary. The command is `musica`. It plays a local music
-library. The player opens as the r2d2 screen `r2d2 musica` through the public
-`player` package. Bare `musica` execs `r2d2 musica`. YouTube downloads run in a
+library. The saved library opens in the Tesseract Musica center, the third
+center of the Super+T launcher: bare `musica`, and `r2d2 musica` through the
+public `player` package, run the launcher's `open.sh musica`, and the launcher
+runs `musica serve` and reads its control socket. A terminal session that
+holds the socket is taken over: the launcher runs `musica end`, which notes the
+track its ffplay has loaded and waits until the session lets go, then
+`musica serve`, which opens that track's cassette paused and plays nothing.
+`musica play` and `musica open` still open the terminal TUI. YouTube downloads run in a
 detached `musica download-worker`, found on PATH, so they continue after the
 TUI closes. Config stays at `~/.config/r2d2/musica/config.json`. When it is
 absent, an existing `~/.config/musica/config.json`, or else

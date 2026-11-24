@@ -16,6 +16,13 @@ const (
 	defaultSampleRate    = 11025
 	defaultWindowSamples = 1024
 	defaultBands         = 32
+	// kickTop is the highest band center, in Hz, the kick is heard in: from
+	// 40 Hz up through a kick drum's thump and its punch.
+	kickTop = 170
+	// kickFloor is the low-end rise, in band energy, that counts as a whole
+	// kick when nothing has risen for a while: a 60 Hz tone about 52 dB under
+	// full scale. A rise out of silence or dither stays far below it.
+	kickFloor = 1e8
 )
 
 type bandBins struct {
@@ -46,6 +53,21 @@ type Analyzer struct {
 	lowBaseline float64
 	beatEnv     float64
 	paused      bool
+
+	// The stream is heard half a window at a time: pcm is the last whole
+	// window, and halves counts the halves since the stream started.
+	pcm    []int16
+	halves int
+	// The kick is heard in the lowest kickBands bands. kickHold is what is
+	// left of their recent energy, kickBase is its slow mean, kickMean is the
+	// mean of its recent rises, kickHit is the last window's hit, and thump
+	// is the hardest kick since Thump last took it.
+	kickBands int
+	kickHold  float64
+	kickBase  float64
+	kickMean  float64
+	kickHit   float64
+	thump     float64
 }
 
 func New(bands int) *Analyzer {
@@ -65,8 +87,10 @@ func New(bands int) *Analyzer {
 		lowBaseline:   1e-6,
 		window:        buildWindow(defaultWindowSamples),
 		tilt:          buildTilt(bands),
+		pcm:           make([]int16, defaultWindowSamples),
 	}
 	a.bins = a.buildBandBins()
+	a.kickBands = a.countKickBands()
 	a.resetShape()
 	return a
 }
@@ -126,6 +150,7 @@ func (a *Analyzer) Stop() {
 	a.done = nil
 	a.paused = false
 	a.fadeLocked(0.65)
+	a.thump = 0
 	a.mu.Unlock()
 
 	if cmd == nil || cmd.Process == nil {
@@ -176,51 +201,48 @@ func (a *Analyzer) Peaks() []float64 {
 	return append([]float64(nil), a.peaks...)
 }
 
+// Thump is the hardest kick heard since the last call, from 0 to 1, and
+// starts the next count from 0. A frame that takes it carries the strongest
+// low-end hit since the frame before, however many windows came between, not
+// what is left of it when the frame is built.
+func (a *Analyzer) Thump() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	thump := a.thump
+	a.thump = 0
+	return thump
+}
+
+// Feed hears samples, mono at the analyzer's rate, as the stream does, half a
+// window at a time; a part half at the end is dropped. It does nothing while
+// a stream runs.
+func (a *Analyzer) Feed(samples []int16) {
+	half := a.windowSamples / 2
+	for half > 0 && len(samples) >= half {
+		if !a.hear(nil, samples[:half]) {
+			return
+		}
+		samples = samples[half:]
+	}
+}
+
 func (a *Analyzer) run(cmd *exec.Cmd, stdout io.Reader, done chan struct{}) {
 	defer close(done)
 	defer func() { _ = cmd.Wait() }()
 
-	buf := make([]byte, a.windowSamples*2)
-	samples := make([]int16, a.windowSamples)
+	half := make([]int16, a.windowSamples/2)
+	buf := make([]byte, len(half)*2)
 
 	for {
 		if _, err := io.ReadFull(stdout, buf); err != nil {
 			break
 		}
-		for i := range samples {
-			samples[i] = int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		for i := range half {
+			half[i] = int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
 		}
-		raw := a.bandEnergies(samples)
-		targets := a.shapeLevels(raw)
-
-		a.mu.Lock()
-		if a.cmd != cmd {
-			a.mu.Unlock()
+		if !a.hear(cmd, half) {
 			break
 		}
-		for i := 0; i < a.bands; i++ {
-			previous := a.levels[i]
-			target := targets[i]
-			attack := 0.65
-			release := 0.10
-			hold := 0.90
-			if i < minInt(6, a.bands) {
-				attack = 0.72
-				release = 0.12
-				hold = 0.88
-			}
-			if target >= previous {
-				a.levels[i] = previous*(1-attack) + target*attack
-			} else {
-				a.levels[i] = previous*hold + target*release
-			}
-			if a.levels[i] >= a.peaks[i] {
-				a.peaks[i] = a.levels[i]
-			} else {
-				a.peaks[i] *= 0.965
-			}
-		}
-		a.mu.Unlock()
 	}
 
 	a.mu.Lock()
@@ -231,6 +253,97 @@ func (a *Analyzer) run(cmd *exec.Cmd, stdout io.Reader, done chan struct{}) {
 		a.fadeLocked(0.8)
 	}
 	a.mu.Unlock()
+}
+
+// hear takes the next half window of the stream. From the second half on,
+// each half closes a window that overlaps the one before by half. Every
+// window is heard for a kick, so a kick that lands across the edge of two
+// windows is still heard whole, and every other window, a whole window after
+// the last, also moves the levels. It reports false once cmd is no longer the
+// analyzer's stream.
+func (a *Analyzer) hear(cmd *exec.Cmd, half []int16) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cmd != cmd {
+		return false
+	}
+	copy(a.pcm, a.pcm[len(half):])
+	copy(a.pcm[len(a.pcm)-len(half):], half)
+	a.halves++
+	if a.halves < 2 {
+		return true
+	}
+	raw := a.bandEnergies(a.pcm)
+	a.thump = math.Max(a.thump, a.kick(raw))
+	if a.halves%2 == 0 {
+		a.moveLevelsLocked(a.shapeLevels(raw))
+	}
+	return true
+}
+
+// moveLevelsLocked moves each level toward its target, faster up than down,
+// and lets each peak fall slowly behind its level.
+func (a *Analyzer) moveLevelsLocked(targets []float64) {
+	for i := 0; i < a.bands; i++ {
+		previous := a.levels[i]
+		target := targets[i]
+		attack := 0.65
+		release := 0.10
+		hold := 0.90
+		if i < minInt(6, a.bands) {
+			attack = 0.72
+			release = 0.12
+			hold = 0.88
+		}
+		if target >= previous {
+			a.levels[i] = previous*(1-attack) + target*attack
+		} else {
+			a.levels[i] = previous*hold + target*release
+		}
+		if a.levels[i] >= a.peaks[i] {
+			a.peaks[i] = a.levels[i]
+		} else {
+			a.peaks[i] *= 0.965
+		}
+	}
+}
+
+// kick is how hard the low end hit in this window, from 0 to 1. It is the
+// beat flux, the low end's energy above its baseline. The baseline is the
+// louder of the slow mean and what is left of the windows before, a peak that
+// falls by 30% each half window, so a held tone hits once, as it starts. A
+// rise counts in full when it stands well clear of the mean of the recent
+// rises, so each kick of a song reads near 1 however loud the song is. Only
+// what a window adds to the hit of the window before counts, so two windows
+// that overlap hear one kick once.
+func (a *Analyzer) kick(raw []float64) float64 {
+	count := minInt(a.kickBands, len(raw))
+	low := 0.0
+	for i := 0; i < count; i++ {
+		low += raw[i] * a.tilt[i]
+	}
+	low /= float64(maxInt(1, count))
+	a.kickBase = a.kickBase*0.988 + low*0.012
+	rise := math.Max(0, low-math.Max(a.kickHold, a.kickBase)*1.12)
+	a.kickHold = math.Max(low, a.kickHold*0.7)
+	mean := a.kickMean
+	a.kickMean = mean*0.95 + rise*0.05
+	hit := clamp((rise-2*mean)/(4*mean+kickFloor), 0, 1)
+	added := math.Max(0, hit-a.kickHit)
+	a.kickHit = hit
+	return added
+}
+
+// countKickBands is how many of the lowest bands lie under kickTop, at least
+// one.
+func (a *Analyzer) countKickBands() int {
+	count := 0
+	for _, frequency := range a.bandFrequencies() {
+		if frequency < kickTop {
+			count++
+		}
+	}
+	return maxInt(1, count)
 }
 
 func (a *Analyzer) resetShape() {
@@ -248,6 +361,13 @@ func (a *Analyzer) resetShapeLocked() {
 	}
 	a.lowBaseline = 1e-6
 	a.beatEnv = 0
+	clear(a.pcm)
+	a.halves = 0
+	a.kickHold = 0
+	a.kickBase = 0
+	a.kickMean = 0
+	a.kickHit = 0
+	a.thump = 0
 }
 
 func (a *Analyzer) fadeLocked(multiplier float64) {

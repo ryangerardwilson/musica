@@ -5,25 +5,50 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
-var lookPath = exec.LookPath
-var execProcess = syscall.Exec
+// startCenter starts the launcher script in its own session and does not
+// wait for it: the launcher stays up after musica returns. Tests replace it.
+var startCenter = func(script string) error {
+	cmd := exec.Command(script, "musica")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
 
-// Command is the musica binary. Bare musica execs r2d2 musica, which opens
-// the player. Every other command runs here.
+// Command is the musica binary. It runs the same commands as player.Run.
 func Command(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) > 0 {
-		return Main(args, stdin, stdout, stderr)
+	return Main(args, stdin, stdout, stderr)
+}
+
+// centerScript is the launcher script that shows the Tesseract Musica
+// center: <config>/quickshell/omarchy-launcher/open.sh, <config> being
+// XDG_CONFIG_HOME when it is absolute and ~/.config otherwise.
+func centerScript() (string, error) {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if !filepath.IsAbs(base) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, ".config")
 	}
-	path, err := lookPath("r2d2")
+	return filepath.Join(base, "quickshell", "omarchy-launcher", "open.sh"), nil
+}
+
+// openCenter shows the saved library in the Tesseract Musica center. The
+// launcher starts musica serve when no session is running.
+func openCenter(stderr io.Writer) int {
+	script, err := centerScript()
+	if err == nil {
+		err = startCenter(script)
+	}
 	if err != nil {
-		fmt.Fprintf(stderr, "The player opens with r2d2 musica: %v\n", err)
-		return 1
-	}
-	if err := execProcess(path, []string{"r2d2", "musica"}, os.Environ()); err != nil {
-		fmt.Fprintf(stderr, "exec r2d2 musica: %v\n", err)
+		fmt.Fprintf(stderr, "The Tesseract Musica center opens with %s musica: %v\n", script, err)
 		return 1
 	}
 	return 0

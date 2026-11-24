@@ -53,28 +53,34 @@ func TestOpenAndPlayValidation(t *testing.T) {
 	}
 }
 
-func TestDefaultRunBootstrapsConfigAndStartsApp(t *testing.T) {
+func TestServeBootstrapsConfigAndServesThePlayer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
 	t.Setenv("MUSICA_DB", filepath.Join(tmp, "musica.sqlite"))
 
+	restore := SetRunAppForTest(func(config.AppConfig) int {
+		t.Fatal("musica serve must not open the terminal player")
+		return 1
+	})
+	defer restore()
+	previous := serveApp
+	defer func() { serveApp = previous }()
 	called := false
-	restore := SetRunAppForTest(func(cfg config.AppConfig) int {
+	serveApp = func(cfg config.AppConfig) int {
 		called = true
 		if cfg.MusicDir != filepath.Join(tmp, "home", "Music") {
 			t.Fatalf("MusicDir = %q", cfg.MusicDir)
 		}
 		return 0
-	})
-	defer restore()
+	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Main(nil, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatalf("default run exit = %d, stderr = %s", code, stderr.String())
+	if code := Main([]string{"serve"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("serve exit = %d, stderr = %s", code, stderr.String())
 	}
 	if !called {
-		t.Fatal("runApp was not called")
+		t.Fatal("serveApp was not called")
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "xdg", "r2d2", "musica", "config.json")); err != nil {
 		t.Fatalf("config was not written: %v", err)
