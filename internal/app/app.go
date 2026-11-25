@@ -524,6 +524,11 @@ func (m *model) commitInput() tea.Cmd {
 }
 
 func (m *model) commitYouTubeURL(value string) {
+	if value == "/exit" {
+		m.youtubeURL = ""
+		m.status = "cancelled"
+		return
+	}
 	if value == "" {
 		m.keepInput(inputYouTubeURL, value, "missing YouTube URL")
 		return
@@ -539,6 +544,11 @@ func (m *model) commitYouTubeURL(value string) {
 }
 
 func (m *model) commitYouTubeName(value string) tea.Cmd {
+	if value == "/exit" {
+		m.youtubeURL = ""
+		m.status = "cancelled"
+		return nil
+	}
 	name := safeBaseName(value)
 	if name == "" {
 		m.keepInput(inputYouTubeName, value, "missing song name")

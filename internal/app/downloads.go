@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -147,6 +148,14 @@ func (m model) finishDownloadOp(msg downloadDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.op.kind != opList {
 		m.status = downloadOpStatus(msg)
+	}
+	// A completion that leaves nothing queued, running, failed, or cancelled
+	// closes the download view, so the center returns to the picture.
+	if finished && len(m.downloadRows()) == 0 {
+		m.showDownloads = false
+		if strings.HasPrefix(m.status, "downloading ") {
+			m.status = ""
+		}
 	}
 	cmd := m.nextDownloadOp()
 	return m, cmd

@@ -1156,6 +1156,51 @@ func TestYouTubeURLModalRejectsInvalidURL(t *testing.T) {
 	}
 }
 
+func TestYouTubeURLExitClosesThePrompt(t *testing.T) {
+	m := model{
+		inputKind:  inputYouTubeURL,
+		input:      "  /exit  ",
+		youtubeURL: "https://youtu.be/left",
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(model)
+	if updated.inputKind != "" || updated.input != "" || updated.youtubeURL != "" {
+		t.Fatalf("exit state = inputKind %q input %q url %q, want cleared", updated.inputKind, updated.input, updated.youtubeURL)
+	}
+	if updated.status != "cancelled" {
+		t.Fatalf("status = %q, want cancelled", updated.status)
+	}
+}
+
+func TestYouTubeNameExitClosesThePrompt(t *testing.T) {
+	originalDownload := enqueueDownload
+	defer func() { enqueueDownload = originalDownload }()
+	called := false
+	enqueueDownload = func(playlistDir, filename, rawURL string) error {
+		called = true
+		return nil
+	}
+
+	m := model{
+		inputKind:  inputYouTubeName,
+		input:      "/exit",
+		youtubeURL: "https://youtu.be/example",
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(model)
+	if cmd != nil || called {
+		t.Fatal("exit queued a download")
+	}
+	if updated.inputKind != "" || updated.input != "" || updated.youtubeURL != "" {
+		t.Fatalf("exit state = inputKind %q input %q url %q, want cleared", updated.inputKind, updated.input, updated.youtubeURL)
+	}
+	if updated.status != "cancelled" {
+		t.Fatalf("status = %q, want cancelled", updated.status)
+	}
+}
+
 func TestYouTubeNameModalDownloadsTrack(t *testing.T) {
 	originalDownload := enqueueDownload
 	defer func() { enqueueDownload = originalDownload }()

@@ -144,3 +144,52 @@ func TestDownloadRowsWrap(t *testing.T) {
 		t.Fatalf("empty %d", next.(model).downloadIndex)
 	}
 }
+
+func TestLastFinishedDownloadClosesTheView(t *testing.T) {
+	m := model{
+		trackDownloads: true,
+		showDownloads:  true,
+		status:         "downloading Flow",
+		downloads:      []store.Job{{ID: "1", Title: "Flow", Status: "running"}},
+	}
+	next, _ := m.Update(downloadDoneMsg{
+		op:   downloadOp{kind: opList, list: true},
+		jobs: []store.Job{{ID: "1", Title: "Flow", Status: "done"}},
+	})
+	got := next.(model)
+	if got.showDownloads {
+		t.Fatal("download view stayed open after the last download finished")
+	}
+	if got.status != "" {
+		t.Fatalf("status %q, want the downloading line cleared", got.status)
+	}
+	if len(got.downloadRows()) != 0 {
+		t.Fatalf("rows %+v", got.downloadRows())
+	}
+}
+
+func TestFinishedDownloadKeepsTheViewWhileAnotherRemains(t *testing.T) {
+	m := model{
+		trackDownloads: true,
+		showDownloads:  true,
+		downloads: []store.Job{
+			{ID: "1", Title: "Flow", Status: "running"},
+			{ID: "2", Title: "Other", Status: "queued"},
+		},
+	}
+	next, _ := m.Update(downloadDoneMsg{
+		op: downloadOp{kind: opList, list: true},
+		jobs: []store.Job{
+			{ID: "1", Title: "Flow", Status: "done"},
+			{ID: "2", Title: "Other", Status: "queued"},
+		},
+	})
+	got := next.(model)
+	if !got.showDownloads {
+		t.Fatal("download view closed while a download remained")
+	}
+	rows := got.downloadRows()
+	if len(rows) != 1 || rows[0].ID != "2" {
+		t.Fatalf("rows %+v", rows)
+	}
+}
